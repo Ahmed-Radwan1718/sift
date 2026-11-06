@@ -25,9 +25,12 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_WIN
     // Match the Windows 11 title bar to the dark application window.
     const BOOL darkTitleBar = TRUE;
+    // Attribute 20 enables the dark title bar on Windows 10/11.
+    // Use the numeric value because older MinGW headers may not define its name.
+    constexpr DWORD darkTitleBarAttribute = 20;
     DwmSetWindowAttribute(
         reinterpret_cast<HWND>(window.winId()),
-        DWMWA_USE_IMMERSIVE_DARK_MODE,
+        darkTitleBarAttribute,
         &darkTitleBar,
         sizeof(darkTitleBar));
 #endif
