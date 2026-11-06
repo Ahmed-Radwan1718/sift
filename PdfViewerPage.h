@@ -3,6 +3,7 @@
 #include <QPdfDocument>
 #include <QWidget>
 
+class QEvent;
 class QLabel;
 class QPushButton;
 class QPdfView;
@@ -15,12 +16,16 @@ class PdfViewerPage final : public QWidget
 public:
     explicit PdfViewerPage(const QString &filePath, QWidget *parent = nullptr);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     void handleStatus(QPdfDocument::Status status);
     void updatePageControls();
     void updateZoomLabel();
     void jumpToPage(int pageIndex);
     void changeZoom(qreal multiplier);
+    qreal effectiveZoomFactor() const;
 
     QPdfDocument *m_document = nullptr;
     QPdfView *m_view = nullptr;

@@ -1,18 +1,23 @@
 #include "PdfViewerPage.h"
 
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMargins>
 #include <QPdfPageNavigator>
 #include <QPdfView>
 #include <QPointF>
 #include <QPushButton>
+#include <QScreen>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -103,6 +108,9 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     m_view->setPageSpacing(14);
     m_view->setDocumentMargins(QMargins(22, 18, 22, 18));
     m_view->setDocument(m_document);
+    // QAbstractScrollArea delivers wheel events to its viewport widget.
+    // Intercept Ctrl+wheel before the built-in scroll handling.
+    m_view->viewport()->installEventFilter(this);
     m_stack->addWidget(m_view);
 
     m_messagePage = new QWidget(m_stack);
@@ -237,10 +245,66 @@ void PdfViewerPage::updatePageControls()
     m_next->setEnabled(ready && currentPage + 1 < pageCount);
 }
 
+
+bool PdfViewerPage::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_view->viewport() && event->type() == QEvent::Wheel) {
+        auto *wheel = static_cast<QWheelEvent *>(event);
+
+        if (wheel->modifiers().testFlag(Qt::ControlModifier)) {
+            if (m_document->status() == QPdfDocument::Status::Ready) {
+                // A standard wheel notch is 120 angle units; trackpads may
+                // report smaller angles or only pixel deltas.
+                qreal steps = wheel->angleDelta().y() / 120.0;
+                if (qFuzzyIsNull(steps))
+                    steps = wheel->pixelDelta().y() / 100.0;
+
+                if (!qFuzzyIsNull(steps))
+                    changeZoom(std::pow(1.15, steps));
+            }
+
+            // Ctrl+wheel zooms; don't scroll the document as well.
+            wheel->accept();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+qreal PdfViewerPage::effectiveZoomFactor() const
+{
+    if (m_view->zoomMode() == QPdfView::ZoomMode::Custom)
+        return m_view->zoomFactor();
+
+    if (m_document->status() != QPdfDocument::Status::Ready ||
+        m_document->pageCount() == 0)
+        return 1.0;
+
+    const int page = std::clamp(m_view->pageNavigator()->currentPage(),
+                                0, m_document->pageCount() - 1);
+    const QSizeF points = m_document->pagePointSize(page);
+    if (points.isEmpty())
+        return 1.0;
+
+    // QPdfView renders PDF points using logical screen DPI / 72.
+    const auto *screen = QGuiApplication::primaryScreen();
+    const qreal resolution = (screen ? screen->logicalDotsPerInch() : 96.0) / 72.0;
+    const QMargins margins = m_view->documentMargins();
+    const qreal availableWidth = std::max<qreal>(
+        1.0, m_view->viewport()->width() - margins.left() - margins.right());
+    const qreal fitWidth = availableWidth / (points.width() * resolution);
+
+    if (m_view->zoomMode() == QPdfView::ZoomMode::FitToWidth)
+        return fitWidth;
+
+    const qreal availableHeight = std::max<qreal>(
+        1.0, m_view->viewport()->height() - margins.top() - m_view->pageSpacing());
+    return std::min(fitWidth, availableHeight / (points.height() * resolution));
+}
+
 void PdfViewerPage::changeZoom(qreal multiplier)
 {
-    const qreal base = m_view->zoomMode() == QPdfView::ZoomMode::Custom
-                           ? m_view->zoomFactor() : 1.0;
+    const qreal base = effectiveZoomFactor();
     const qreal next = std::clamp(base * multiplier, 0.25, 4.0);
     m_view->setZoomMode(QPdfView::ZoomMode::Custom);
     m_view->setZoomFactor(next);
