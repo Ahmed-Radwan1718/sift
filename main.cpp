@@ -27,19 +27,6 @@ int main(int argc, char *argv[])
             background-color: #191919;
             border-right: 1px solid #353535;
         }
-        QLabel#sidebarMark {
-            background-color: #343434;
-            border: 1px solid #494949;
-            border-radius: 8px;
-            color: #f2f2f2;
-            font-size: 16px;
-            font-weight: 700;
-        }
-        QLabel#sidebarBrand {
-            color: #f5f5f5;
-            font-size: 19px;
-            font-weight: 700;
-        }
         QLabel#sidebarSection {
             color: #777777;
             font-size: 10px;

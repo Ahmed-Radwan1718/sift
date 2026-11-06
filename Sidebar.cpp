@@ -112,32 +112,6 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
     layout->setContentsMargins(12, 18, 12, 16);
     layout->setSpacing(3);
 
-    auto *brand = new QWidget(this);
-    auto *brandLayout = new QHBoxLayout(brand);
-    brandLayout->setContentsMargins(6, 0, 0, 0);
-    brandLayout->setSpacing(10);
-
-    m_mark = new QLabel(QStringLiteral("S"), brand);
-    m_mark->setObjectName(QStringLiteral("sidebarMark"));
-    m_mark->setFixedSize(32, 32);
-    m_mark->setAlignment(Qt::AlignCenter);
-    brandLayout->addWidget(m_mark);
-
-    m_title = new QLabel(QStringLiteral("Sift"), brand);
-    m_title->setObjectName(QStringLiteral("sidebarBrand"));
-    brandLayout->addWidget(m_title);
-    brandLayout->addStretch();
-
-    m_toggle = new QPushButton(QStringLiteral("‹"), brand);
-    m_toggle->setObjectName(QStringLiteral("sidebarToggle"));
-    m_toggle->setFixedSize(30, 30);
-    m_toggle->setToolTip(QStringLiteral("Collapse sidebar"));
-    m_toggle->setCursor(Qt::PointingHandCursor);
-    brandLayout->addWidget(m_toggle);
-
-    layout->addWidget(brand);
-    layout->addSpacing(33);
-
     m_section = new QLabel(QStringLiteral("WORKSPACE"), this);
     m_section->setObjectName(QStringLiteral("sidebarSection"));
     m_section->setContentsMargins(11, 0, 0, 8);
@@ -163,10 +137,24 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
     addNavigationItem(QStringLiteral("settings"), QStringLiteral("Settings"),
                       QStringLiteral("settings"), layout);
 
-    m_footer = new QLabel(QStringLiteral("READ ONLY  ·  SIFT"), this);
+    // Keep the collapse action available, without a branding header.
+    auto *bottom = new QWidget(this);
+    auto *bottomLayout = new QHBoxLayout(bottom);
+    bottomLayout->setContentsMargins(7, 9, 3, 0);
+    bottomLayout->setSpacing(4);
+
+    m_footer = new QLabel(QStringLiteral("READ ONLY"), bottom);
     m_footer->setObjectName(QStringLiteral("sidebarFooter"));
-    m_footer->setContentsMargins(11, 11, 0, 0);
-    layout->addWidget(m_footer);
+    bottomLayout->addWidget(m_footer, 1);
+
+    m_toggle = new QPushButton(QStringLiteral("‹"), bottom);
+    m_toggle->setObjectName(QStringLiteral("sidebarToggle"));
+    m_toggle->setFixedSize(30, 30);
+    m_toggle->setToolTip(QStringLiteral("Collapse sidebar"));
+    m_toggle->setCursor(Qt::PointingHandCursor);
+    bottomLayout->addWidget(m_toggle);
+
+    layout->addWidget(bottom);
 
     connect(m_toggle, &QPushButton::clicked, this, [this]() {
         setCollapsed(!m_collapsed);
@@ -210,8 +198,6 @@ void Sidebar::setCollapsed(bool collapsed)
 {
     m_collapsed = collapsed;
     setFixedWidth(collapsed ? 66 : 220);
-    m_mark->setVisible(!collapsed);
-    m_title->setVisible(!collapsed);
     m_section->setVisible(!collapsed);
     m_footer->setVisible(!collapsed);
 

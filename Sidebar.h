@@ -37,8 +37,6 @@ private:
     std::function<void(const QString &)> m_navigate;
     QVector<NavItem> m_items;
     QString m_activePage = QStringLiteral("home");
-    QLabel *m_mark = nullptr;
-    QLabel *m_title = nullptr;
     QLabel *m_section = nullptr;
     QLabel *m_footer = nullptr;
     QPushButton *m_toggle = nullptr;
