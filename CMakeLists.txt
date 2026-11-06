@@ -10,6 +10,8 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
 qt_add_executable(Sift
     WIN32
     main.cpp
+    MainWindow.h
+    MainWindow.cpp
 )
 
 target_link_libraries(Sift PRIVATE Qt6::Widgets)
