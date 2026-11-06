@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "PdfViewerPage.h"
+#include "Sidebar.h"
 
 #include <QDir>
 #include <QDragEnterEvent>
@@ -16,6 +17,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
@@ -63,55 +65,74 @@ MainWindow::MainWindow(QWidget *parent)
     auto *root = new QWidget(this);
     root->setObjectName(QStringLiteral("root"));
 
-    auto *rootLayout = new QVBoxLayout(root);
+    // Full-height navigation stays visible while switching document tabs.
+    auto *rootLayout = new QHBoxLayout(root);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto *topBar = new QFrame(root);
+    m_sidebar = new Sidebar([this](const QString &page) {
+        showSection(page);
+    }, root);
+    rootLayout->addWidget(m_sidebar);
+
+    auto *mainArea = new QWidget(root);
+    mainArea->setObjectName(QStringLiteral("mainArea"));
+    auto *contentLayout = new QVBoxLayout(mainArea);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
+    rootLayout->addWidget(mainArea, 1);
+
+    auto *topBar = new QFrame(mainArea);
     topBar->setObjectName(QStringLiteral("topBar"));
-    topBar->setFixedHeight(66);
+    topBar->setFixedHeight(64);
     auto *topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(24, 0, 24, 0);
+    topLayout->setContentsMargins(27, 0, 27, 0);
     topLayout->setSpacing(12);
 
-    auto *mark = centeredLabel(QStringLiteral("S"), "logoMark", topBar);
-    mark->setFixedSize(36, 36);
-    topLayout->addWidget(mark);
-
-    auto *name = new QLabel(QStringLiteral("Sift"), topBar);
-    name->setObjectName(QStringLiteral("appName"));
-    topLayout->addWidget(name);
+    m_headerTitle = new QLabel(QStringLiteral("Home"), topBar);
+    m_headerTitle->setObjectName(QStringLiteral("headerTitle"));
+    topLayout->addWidget(m_headerTitle);
     topLayout->addStretch();
-
-    m_headerHome = new QPushButton(QStringLiteral("Home"), topBar);
-    m_headerHome->setObjectName(QStringLiteral("subtleButton"));
-    m_headerHome->setCursor(Qt::PointingHandCursor);
-    topLayout->addWidget(m_headerHome);
 
     m_headerOpen = new QPushButton(QStringLiteral("Open files"), topBar);
     m_headerOpen->setObjectName(QStringLiteral("subtleButton"));
     m_headerOpen->setCursor(Qt::PointingHandCursor);
     topLayout->addWidget(m_headerOpen);
+    contentLayout->addWidget(topBar);
 
-    rootLayout->addWidget(topBar);
-
-    m_tabs = new QTabWidget(root);
+    m_tabs = new QTabWidget(mainArea);
     m_tabs->setObjectName(QStringLiteral("documentTabs"));
     m_tabs->setDocumentMode(true);
     m_tabs->setTabsClosable(true);
     m_tabs->setMovable(false);
 
     m_tabs->addTab(createHomePage(), QStringLiteral("Home"));
-    // The Home tab must never be closable.
     m_tabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
-    rootLayout->addWidget(m_tabs, 1);
+
+    m_mainStack = new QStackedWidget(mainArea);
+    m_mainStack->addWidget(m_tabs); // Index 0: home + open documents
+    m_mainStack->addWidget(createRecentPage()); // Index 1
+    m_mainStack->addWidget(createPlaceholderPage(
+        QStringLiteral("Favorites"),
+        QStringLiteral("Your pinned documents will appear here. "
+                       "We'll add favoriting after the library layout."))); // Index 2
+    m_mainStack->addWidget(createPlaceholderPage(
+        QStringLiteral("Folders"),
+        QStringLiteral("Quick access to folders you choose will appear here. "
+                       "Sift will not move or copy your original documents."))); // Index 3
+    m_mainStack->addWidget(createPlaceholderPage(
+        QStringLiteral("Settings"),
+        QStringLiteral("App preferences will live here. "
+                       "The sidebar collapse preference is already saved."))); // Index 4
+    contentLayout->addWidget(m_mainStack, 1);
     setCentralWidget(root);
 
-    connect(m_headerHome, &QPushButton::clicked, this, [this]() {
-        m_tabs->setCurrentIndex(0);
-    });
     connect(m_headerOpen, &QPushButton::clicked,
             this, &MainWindow::openFilesDialog);
+
+    connect(m_tabs, &QTabWidget::currentChanged, this, [this](int) {
+        updateCurrentTabHeader();
+    });
 
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
         if (index <= 0)
@@ -129,6 +150,110 @@ MainWindow::MainWindow(QWidget *parent)
 
     refreshRecentFiles();
     refreshTabVisibility();
+    updateCurrentTabHeader();
+}
+
+void MainWindow::showSection(const QString &section)
+{
+    if (section == QLatin1String("home")) {
+        m_mainStack->setCurrentWidget(m_tabs);
+        m_tabs->setCurrentIndex(0);
+        updateCurrentTabHeader();
+        return;
+    }
+
+    int index = -1;
+    QString title;
+    if (section == QLatin1String("recent")) {
+        index = 1;
+        title = QStringLiteral("Recent");
+        refreshRecentFiles();
+    } else if (section == QLatin1String("favorites")) {
+        index = 2;
+        title = QStringLiteral("Favorites");
+    } else if (section == QLatin1String("folders")) {
+        index = 3;
+        title = QStringLiteral("Folders");
+    } else if (section == QLatin1String("settings")) {
+        index = 4;
+        title = QStringLiteral("Settings");
+    }
+
+    if (index < 0)
+        return;
+
+    m_mainStack->setCurrentIndex(index);
+    m_sidebar->setActivePage(section);
+    m_headerTitle->setText(title);
+}
+
+void MainWindow::updateCurrentTabHeader()
+{
+    if (m_mainStack->currentWidget() != m_tabs)
+        return;
+
+    const int index = m_tabs->currentIndex();
+    if (index <= 0) {
+        m_sidebar->setActivePage(QStringLiteral("home"));
+        m_headerTitle->setText(QStringLiteral("Home"));
+    } else {
+        // Documents are not navigation sections, so leave the sidebar neutral.
+        m_sidebar->setActivePage(QString());
+        m_headerTitle->setText(m_tabs->tabText(index));
+    }
+}
+
+QWidget *MainWindow::createRecentPage()
+{
+    auto *page = new QWidget;
+    page->setObjectName(QStringLiteral("libraryPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(36, 40, 36, 30);
+    layout->setSpacing(0);
+
+    auto *title = new QLabel(QStringLiteral("Recent documents"), page);
+    title->setObjectName(QStringLiteral("libraryTitle"));
+    layout->addWidget(title);
+    layout->addSpacing(9);
+
+    auto *description = new QLabel(
+        QStringLiteral("Files you've recently opened in Sift."), page);
+    description->setObjectName(QStringLiteral("libraryDescription"));
+    layout->addWidget(description);
+    layout->addSpacing(32);
+    layout->addWidget(divider(page));
+    layout->addSpacing(8);
+
+    m_recentSectionItems = new QVBoxLayout;
+    m_recentSectionItems->setSpacing(1);
+    m_recentSectionItems->setContentsMargins(0, 0, 0, 0);
+    layout->addLayout(m_recentSectionItems);
+    layout->addStretch();
+
+    return page;
+}
+
+QWidget *MainWindow::createPlaceholderPage(const QString &title,
+                                             const QString &description)
+{
+    auto *page = new QWidget;
+    page->setObjectName(QStringLiteral("libraryPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(36, 40, 36, 30);
+    layout->setSpacing(0);
+
+    auto *heading = new QLabel(title, page);
+    heading->setObjectName(QStringLiteral("libraryTitle"));
+    layout->addWidget(heading);
+    layout->addSpacing(9);
+
+    auto *note = new QLabel(description, page);
+    note->setObjectName(QStringLiteral("libraryDescription"));
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    layout->addStretch();
+
+    return page;
 }
 
 QWidget *MainWindow::createHomePage()
@@ -303,7 +428,9 @@ void MainWindow::openFile(const QString &filePath)
         if (QString::compare(
                 m_tabs->widget(i)->property("filePath").toString(),
                 absolutePath, filePathComparison()) == 0) {
+            m_mainStack->setCurrentWidget(m_tabs);
             m_tabs->setCurrentIndex(i);
+            updateCurrentTabHeader();
             addToRecentFiles(absolutePath);
             return;
         }
@@ -312,7 +439,9 @@ void MainWindow::openFile(const QString &filePath)
     auto *page = createDocumentPage(absolutePath);
     const int index = m_tabs->addTab(page, info.fileName());
     m_tabs->setTabToolTip(index, QDir::toNativeSeparators(absolutePath));
+    m_mainStack->setCurrentWidget(m_tabs);
     m_tabs->setCurrentIndex(index);
+    updateCurrentTabHeader();
     addToRecentFiles(absolutePath);
     refreshTabVisibility();
 }
@@ -339,55 +468,57 @@ void MainWindow::addToRecentFiles(const QString &filePath)
 
 void MainWindow::refreshRecentFiles()
 {
-    if (!m_recentItems)
-        return;
-
-    while (QLayoutItem *item = m_recentItems->takeAt(0)) {
-        if (QWidget *widget = item->widget())
-            widget->deleteLater();
-        delete item;
-    }
-
     const QStringList paths = recentFiles();
-    if (paths.isEmpty()) {
-        auto *empty = new QLabel(QStringLiteral("No recent files yet."));
-        empty->setObjectName(QStringLiteral("smallText"));
-        empty->setContentsMargins(8, 12, 8, 12);
-        m_recentItems->addWidget(empty);
-        return;
-    }
+    auto populate = [this, &paths](QVBoxLayout *items) {
+        if (!items)
+            return;
 
-    for (const QString &path : paths) {
-        auto *row = new QWidget;
-        auto *rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 2, 0);
-        rowLayout->setSpacing(10);
+        while (QLayoutItem *item = items->takeAt(0)) {
+            if (QWidget *widget = item->widget())
+                widget->deleteLater();
+            delete item;
+        }
 
-        const QFileInfo info(path);
-        auto *button = new QPushButton(info.fileName(), row);
-        button->setObjectName(QStringLiteral("recentItem"));
-        button->setToolTip(QDir::toNativeSeparators(path));
-        button->setCursor(Qt::PointingHandCursor);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        connect(button, &QPushButton::clicked, this, [this, path]() {
-            openFile(path);
-        });
-        rowLayout->addWidget(button, 1);
+        if (paths.isEmpty()) {
+            auto *empty = new QLabel(QStringLiteral("No recent files yet."));
+            empty->setObjectName(QStringLiteral("smallText"));
+            empty->setContentsMargins(8, 12, 8, 12);
+            items->addWidget(empty);
+            return;
+        }
 
-        auto *tag = new QLabel(info.suffix().toUpper(), row);
-        tag->setObjectName(QStringLiteral("extensionTag"));
-        rowLayout->addWidget(tag);
+        for (const QString &path : paths) {
+            auto *row = new QWidget;
+            auto *rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(0, 0, 2, 0);
+            rowLayout->setSpacing(10);
 
-        m_recentItems->addWidget(row);
-    }
+            const QFileInfo info(path);
+            auto *button = new QPushButton(info.fileName(), row);
+            button->setObjectName(QStringLiteral("recentItem"));
+            button->setToolTip(QDir::toNativeSeparators(path));
+            button->setCursor(Qt::PointingHandCursor);
+            button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            connect(button, &QPushButton::clicked, this, [this, path]() {
+                openFile(path);
+            });
+            rowLayout->addWidget(button, 1);
+
+            auto *tag = new QLabel(info.suffix().toUpper(), row);
+            tag->setObjectName(QStringLiteral("extensionTag"));
+            rowLayout->addWidget(tag);
+
+            items->addWidget(row);
+        }
+    };
+
+    populate(m_recentItems);
+    populate(m_recentSectionItems);
 }
 
 void MainWindow::refreshTabVisibility()
 {
-    const bool hasDocuments = m_tabs->count() > 1;
-    m_tabs->tabBar()->setVisible(hasDocuments);
-    m_headerHome->setVisible(hasDocuments);
-    m_headerOpen->setVisible(hasDocuments);
+    m_tabs->tabBar()->setVisible(m_tabs->count() > 1);
 }
 
 void MainWindow::setDropHighlight(bool active)

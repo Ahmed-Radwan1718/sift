@@ -19,8 +19,90 @@ int main(int argc, char *argv[])
             font-family: "Segoe UI";
             font-size: 14px;
         }
-        QMainWindow, QWidget#root, QWidget#homeSurface, QWidget#documentPage {
+        QMainWindow, QWidget#root, QWidget#mainArea, QWidget#homeSurface,
+        QWidget#documentPage, QWidget#libraryPage {
             background-color: #232323;
+        }
+        QFrame#sidebar {
+            background-color: #191919;
+            border-right: 1px solid #353535;
+        }
+        QLabel#sidebarMark {
+            background-color: #343434;
+            border: 1px solid #494949;
+            border-radius: 8px;
+            color: #f2f2f2;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        QLabel#sidebarBrand {
+            color: #f5f5f5;
+            font-size: 19px;
+            font-weight: 700;
+        }
+        QLabel#sidebarSection {
+            color: #777777;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        QLabel#sidebarFooter {
+            color: #626262;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        QFrame#sidebarRule {
+            background-color: #353535;
+            border: none;
+        }
+        QPushButton#sidebarToggle {
+            border: none;
+            border-radius: 6px;
+            background-color: transparent;
+            color: #9b9b9b;
+            font-size: 23px;
+            padding: 0px;
+        }
+        QPushButton#sidebarToggle:hover {
+            background-color: #303030;
+            color: #ffffff;
+        }
+        QPushButton#sidebarNav {
+            background-color: transparent;
+            color: #a9a9a9;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            padding: 0px 12px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        QPushButton#sidebarNav:hover {
+            background-color: #2a2a2a;
+            color: #f0f0f0;
+        }
+        QPushButton#sidebarNav[active="true"] {
+            background-color: #343434;
+            color: #f2f2f2;
+            border-left: 2px solid #dedede;
+            font-weight: 600;
+        }
+        QPushButton#sidebarNav[compact="true"] {
+            text-align: center;
+            padding: 0px;
+        }
+        QLabel#headerTitle {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e9e9e9;
+        }
+        QLabel#libraryTitle {
+            color: #eeeeee;
+            font-size: 27px;
+            font-weight: 650;
+        }
+        QLabel#libraryDescription {
+            color: #a0a0a0;
+            font-size: 13px;
         }
         QFrame#topBar {
             background-color: #202020;
