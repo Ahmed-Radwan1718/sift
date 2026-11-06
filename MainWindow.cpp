@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "PdfViewerPage.h"
 
 #include <QDir>
 #include <QDragEnterEvent>
@@ -219,6 +220,9 @@ QWidget *MainWindow::createHomePage()
 
 QWidget *MainWindow::createDocumentPage(const QString &filePath)
 {
+    if (QFileInfo(filePath).suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0)
+        return new PdfViewerPage(filePath);
+
     auto *page = new QWidget;
     page->setObjectName(QStringLiteral("documentPage"));
     page->setProperty("filePath", filePath);

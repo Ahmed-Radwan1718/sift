@@ -116,6 +116,39 @@ int main(int argc, char *argv[])
             border-radius: 5px;
             font-size: 11px;
         }
+        QFrame#pdfToolbar {
+            background-color: #282828;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        QPushButton#pdfControl {
+            background-color: #333333;
+            border: 1px solid #454545;
+            border-radius: 6px;
+            padding: 7px 10px;
+        }
+        QPushButton#pdfControl:hover:enabled {
+            background-color: #434343;
+        }
+        QPushButton#pdfControl:disabled {
+            color: #666666;
+            background-color: #2b2b2b;
+            border-color: #333333;
+        }
+        QLabel#pdfToolbarText {
+            color: #c8c8c8;
+            font-size: 13px;
+        }
+        QLabel#pdfMessage {
+            color: #b6b6b6;
+            font-size: 15px;
+        }
+        QSpinBox#pdfPageInput {
+            color: #eeeeee;
+            background-color: #343434;
+            border: 1px solid #4a4a4a;
+            border-radius: 5px;
+            padding: 5px;
+        }
         QFrame#rowDivider {
             border: none;
             background-color: #353535;
