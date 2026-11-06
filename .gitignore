@@ -1,0 +1,18 @@
+# Build folders and generated build files
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.user
+*.user.*
+*.autosave
+
+# Compiled binaries
+*.exe
+*.obj
+*.o
+*.dll
+*.pdb
