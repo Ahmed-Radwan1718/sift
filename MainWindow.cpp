@@ -1,7 +1,9 @@
 #include "MainWindow.h"
+#include "DocumentDashboard.h"
 #include "PdfViewerPage.h"
 #include "Sidebar.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
@@ -21,13 +23,12 @@
 #include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 
 namespace {
-constexpr int kMaxRecentFiles = 6;
-
 Qt::CaseSensitivity filePathComparison()
 {
 #ifdef Q_OS_WIN
@@ -112,10 +113,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_mainStack = new QStackedWidget(mainArea);
     m_mainStack->addWidget(m_tabs); // Index 0: home + open documents
     m_mainStack->addWidget(createRecentPage()); // Index 1
-    m_mainStack->addWidget(createPlaceholderPage(
-        QStringLiteral("Favorites"),
-        QStringLiteral("Your pinned documents will appear here. "
-                       "We'll add favoriting after the library layout."))); // Index 2
+    m_mainStack->addWidget(createFavoritesPage()); // Index 2
     m_mainStack->addWidget(createPlaceholderPage(
         QStringLiteral("Folders"),
         QStringLiteral("Quick access to folders you choose will appear here. "
@@ -148,7 +146,7 @@ MainWindow::MainWindow(QWidget *parent)
         refreshTabVisibility();
     });
 
-    refreshRecentFiles();
+    refreshDashboards();
     refreshTabVisibility();
     updateCurrentTabHeader();
 }
@@ -167,10 +165,11 @@ void MainWindow::showSection(const QString &section)
     if (section == QLatin1String("recent")) {
         index = 1;
         title = QStringLiteral("Recent");
-        refreshRecentFiles();
+        refreshDashboards();
     } else if (section == QLatin1String("favorites")) {
         index = 2;
         title = QStringLiteral("Favorites");
+        refreshDashboards();
     } else if (section == QLatin1String("folders")) {
         index = 3;
         title = QStringLiteral("Folders");
@@ -205,32 +204,22 @@ void MainWindow::updateCurrentTabHeader()
 
 QWidget *MainWindow::createRecentPage()
 {
-    auto *page = new QWidget;
-    page->setObjectName(QStringLiteral("libraryPage"));
-    auto *layout = new QVBoxLayout(page);
-    layout->setContentsMargins(36, 40, 36, 30);
-    layout->setSpacing(0);
+    m_recentDashboard = new DocumentDashboard(
+        DocumentDashboard::Mode::Recent,
+        [this](const QString &path) { openFile(path); },
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
+        [this]() { openFilesDialog(); });
+    return m_recentDashboard;
+}
 
-    auto *title = new QLabel(QStringLiteral("Recent documents"), page);
-    title->setObjectName(QStringLiteral("libraryTitle"));
-    layout->addWidget(title);
-    layout->addSpacing(9);
-
-    auto *description = new QLabel(
-        QStringLiteral("Files you've recently opened in Sift."), page);
-    description->setObjectName(QStringLiteral("libraryDescription"));
-    layout->addWidget(description);
-    layout->addSpacing(32);
-    layout->addWidget(divider(page));
-    layout->addSpacing(8);
-
-    m_recentSectionItems = new QVBoxLayout;
-    m_recentSectionItems->setSpacing(1);
-    m_recentSectionItems->setContentsMargins(0, 0, 0, 0);
-    layout->addLayout(m_recentSectionItems);
-    layout->addStretch();
-
-    return page;
+QWidget *MainWindow::createFavoritesPage()
+{
+    m_favoritesDashboard = new DocumentDashboard(
+        DocumentDashboard::Mode::Favorites,
+        [this](const QString &path) { openFile(path); },
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
+        [this]() { openFilesDialog(); });
+    return m_favoritesDashboard;
 }
 
 QWidget *MainWindow::createPlaceholderPage(const QString &title,
@@ -258,89 +247,12 @@ QWidget *MainWindow::createPlaceholderPage(const QString &title,
 
 QWidget *MainWindow::createHomePage()
 {
-    auto *scrollArea = new QScrollArea;
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
-    auto *surface = new QWidget;
-    surface->setObjectName(QStringLiteral("homeSurface"));
-    auto *outer = new QVBoxLayout(surface);
-    outer->setContentsMargins(24, 30, 24, 30);
-    outer->addStretch();
-
-    auto *content = new QWidget(surface);
-    content->setMaximumWidth(680);
-    auto *layout = new QVBoxLayout(content);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
-
-    auto *title = centeredLabel(QStringLiteral("Your files, one place."),
-                                "pageTitle", content);
-    layout->addWidget(title);
-    layout->addSpacing(9);
-
-    auto *subtitle = centeredLabel(
-        QStringLiteral("A simple, read-only home for your documents."),
-        "subtitle", content);
-    layout->addWidget(subtitle);
-    layout->addSpacing(29);
-
-    m_dropZone = new QFrame(content);
-    m_dropZone->setObjectName(QStringLiteral("dropZone"));
-    m_dropZone->setProperty("dragActive", false);
-    m_dropZone->setMinimumHeight(242);
-
-    auto *dropLayout = new QVBoxLayout(m_dropZone);
-    dropLayout->setContentsMargins(20, 22, 20, 22);
-    dropLayout->setSpacing(10);
-    dropLayout->setAlignment(Qt::AlignCenter);
-
-    auto *icon = centeredLabel(QStringLiteral("⇧"), "dropSymbol", m_dropZone);
-    icon->setFixedSize(60, 60);
-    dropLayout->addWidget(icon, 0, Qt::AlignHCenter);
-
-    dropLayout->addSpacing(4);
-    auto *dropText = centeredLabel(QStringLiteral("Drag and drop files here"),
-                                   "dropHeading", m_dropZone);
-    dropLayout->addWidget(dropText);
-
-    auto *dropHint = centeredLabel(QStringLiteral("or choose files from your computer"),
-                                   "hint", m_dropZone);
-    dropLayout->addWidget(dropHint);
-    dropLayout->addSpacing(5);
-
-    auto *openButton = new QPushButton(QStringLiteral("Open files"), m_dropZone);
-    openButton->setObjectName(QStringLiteral("primaryButton"));
-    openButton->setCursor(Qt::PointingHandCursor);
-    connect(openButton, &QPushButton::clicked,
-            this, &MainWindow::openFilesDialog);
-    dropLayout->addWidget(openButton, 0, Qt::AlignHCenter);
-    layout->addWidget(m_dropZone);
-
-    layout->addSpacing(15);
-    auto *formats = centeredLabel(
-        QStringLiteral("PDF  ·  DOCX  ·  DOC  ·  XLSX  ·  XLS  ·  PPTX  ·  PPT"),
-        "supported", content);
-    layout->addWidget(formats);
-
-    layout->addSpacing(37);
-    auto *recentHeading = new QLabel(QStringLiteral("Recent files"), content);
-    recentHeading->setObjectName(QStringLiteral("sectionTitle"));
-    layout->addWidget(recentHeading);
-    layout->addSpacing(12);
-    layout->addWidget(divider(content));
-    layout->addSpacing(8);
-
-    m_recentItems = new QVBoxLayout;
-    m_recentItems->setContentsMargins(0, 0, 0, 0);
-    m_recentItems->setSpacing(1);
-    layout->addLayout(m_recentItems);
-
-    outer->addWidget(content, 0, Qt::AlignHCenter);
-    outer->addStretch();
-    scrollArea->setWidget(surface);
-    return scrollArea;
+    m_homeDashboard = new DocumentDashboard(
+        DocumentDashboard::Mode::Home,
+        [this](const QString &path) { openFile(path); },
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
+        [this]() { openFilesDialog(); });
+    return m_homeDashboard;
 }
 
 QWidget *MainWindow::createDocumentPage(const QString &filePath)
@@ -410,9 +322,13 @@ void MainWindow::openFile(const QString &filePath)
         QMessageBox::warning(this, QStringLiteral("File not found"),
             QStringLiteral("This file could not be found:\n%1").arg(filePath));
         QStringList paths = recentFiles();
-        paths.removeAll(filePath);
+        for (int i = paths.size() - 1; i >= 0; --i) {
+            if (QString::compare(paths.at(i), filePath,
+                                 filePathComparison()) == 0)
+                paths.removeAt(i);
+        }
         QSettings().setValue(QStringLiteral("recentFiles"), paths);
-        refreshRecentFiles();
+        refreshDashboards();
         return;
     }
 
@@ -455,81 +371,53 @@ void MainWindow::addToRecentFiles(const QString &filePath)
 {
     QStringList paths = recentFiles();
     for (int i = paths.size() - 1; i >= 0; --i) {
-        if (QString::compare(paths.at(i), filePath, filePathComparison()) == 0)
+        if (QString::compare(paths.at(i), filePath,
+                             filePathComparison()) == 0)
             paths.removeAt(i);
     }
     paths.prepend(filePath);
-    while (paths.size() > kMaxRecentFiles)
-        paths.removeLast();
 
-    QSettings().setValue(QStringLiteral("recentFiles"), paths);
-    refreshRecentFiles();
+    QSettings settings;
+    settings.setValue(QStringLiteral("recentFiles"), paths);
+    QVariantMap times = settings.value(QStringLiteral("lastOpenedTimes")).toMap();
+    times.insert(filePath, QDateTime::currentDateTime().toString(Qt::ISODate));
+    settings.setValue(QStringLiteral("lastOpenedTimes"), times);
+    refreshDashboards();
 }
 
-void MainWindow::refreshRecentFiles()
+void MainWindow::setFavorite(const QString &filePath, bool favorite)
 {
-    const QStringList paths = recentFiles();
-    auto populate = [this, &paths](QVBoxLayout *items) {
-        if (!items)
-            return;
+    QSettings settings;
+    QStringList favorites = settings.value(QStringLiteral("favoriteFiles")).toStringList();
 
-        while (QLayoutItem *item = items->takeAt(0)) {
-            if (QWidget *widget = item->widget())
-                widget->deleteLater();
-            delete item;
-        }
+    for (int i = favorites.size() - 1; i >= 0; --i) {
+        if (QString::compare(favorites.at(i), filePath,
+                             filePathComparison()) == 0)
+            favorites.removeAt(i);
+    }
+    if (favorite)
+        favorites.prepend(filePath);
 
-        if (paths.isEmpty()) {
-            auto *empty = new QLabel(QStringLiteral("No recent files yet."));
-            empty->setObjectName(QStringLiteral("smallText"));
-            empty->setContentsMargins(8, 12, 8, 12);
-            items->addWidget(empty);
-            return;
-        }
+    settings.setValue(QStringLiteral("favoriteFiles"), favorites);
 
-        for (const QString &path : paths) {
-            auto *row = new QWidget;
-            auto *rowLayout = new QHBoxLayout(row);
-            rowLayout->setContentsMargins(0, 0, 2, 0);
-            rowLayout->setSpacing(10);
+    // Refresh after the clicked star button's signal returns, so its row
+    // can be safely recreated (especially when unpinning in Favorites).
+    QTimer::singleShot(0, this, [this]() { refreshDashboards(); });
+}
 
-            const QFileInfo info(path);
-            auto *button = new QPushButton(info.fileName(), row);
-            button->setObjectName(QStringLiteral("recentItem"));
-            button->setToolTip(QDir::toNativeSeparators(path));
-            button->setCursor(Qt::PointingHandCursor);
-            button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-            connect(button, &QPushButton::clicked, this, [this, path]() {
-                openFile(path);
-            });
-            rowLayout->addWidget(button, 1);
-
-            auto *tag = new QLabel(info.suffix().toUpper(), row);
-            tag->setObjectName(QStringLiteral("extensionTag"));
-            rowLayout->addWidget(tag);
-
-            items->addWidget(row);
-        }
-    };
-
-    populate(m_recentItems);
-    populate(m_recentSectionItems);
+void MainWindow::refreshDashboards()
+{
+    if (m_homeDashboard)
+        m_homeDashboard->refresh();
+    if (m_recentDashboard)
+        m_recentDashboard->refresh();
+    if (m_favoritesDashboard)
+        m_favoritesDashboard->refresh();
 }
 
 void MainWindow::refreshTabVisibility()
 {
     m_tabs->tabBar()->setVisible(m_tabs->count() > 1);
-}
-
-void MainWindow::setDropHighlight(bool active)
-{
-    if (!m_dropZone)
-        return;
-
-    m_dropZone->setProperty("dragActive", active);
-    m_dropZone->style()->unpolish(m_dropZone);
-    m_dropZone->style()->polish(m_dropZone);
-    m_dropZone->update();
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
@@ -538,7 +426,6 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event)
         for (const QUrl &url : event->mimeData()->urls()) {
             if (url.isLocalFile() && isSupported(url.toLocalFile())) {
                 event->acceptProposedAction();
-                setDropHighlight(true);
                 return;
             }
         }
@@ -553,13 +440,11 @@ void MainWindow::dragMoveEvent(QDragMoveEvent *event)
 
 void MainWindow::dragLeaveEvent(QDragLeaveEvent *event)
 {
-    setDropHighlight(false);
     event->accept();
 }
 
 void MainWindow::dropEvent(QDropEvent *event)
 {
-    setDropHighlight(false);
     bool openedAny = false;
     for (const QUrl &url : event->mimeData()->urls()) {
         if (!url.isLocalFile())

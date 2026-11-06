@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QStringList>
 
+class DocumentDashboard;
 class QDragEnterEvent;
 class QDragLeaveEvent;
 class QDragMoveEvent;
@@ -30,6 +31,7 @@ protected:
 private:
     QWidget *createHomePage();
     QWidget *createRecentPage();
+    QWidget *createFavoritesPage();
     QWidget *createPlaceholderPage(const QString &title,
                                    const QString &description);
     QWidget *createDocumentPage(const QString &filePath);
@@ -38,18 +40,18 @@ private:
     void openFilesDialog();
     void openFile(const QString &filePath);
     void addToRecentFiles(const QString &filePath);
-    void refreshRecentFiles();
+    void setFavorite(const QString &filePath, bool favorite);
+    void refreshDashboards();
     void refreshTabVisibility();
-    void setDropHighlight(bool active);
     bool isSupported(const QString &filePath) const;
     QStringList recentFiles() const;
 
     Sidebar *m_sidebar = nullptr;
     QStackedWidget *m_mainStack = nullptr;
     QTabWidget *m_tabs = nullptr;
-    QVBoxLayout *m_recentItems = nullptr;
-    QVBoxLayout *m_recentSectionItems = nullptr;
+    DocumentDashboard *m_homeDashboard = nullptr;
+    DocumentDashboard *m_recentDashboard = nullptr;
+    DocumentDashboard *m_favoritesDashboard = nullptr;
     QLabel *m_headerTitle = nullptr;
     QPushButton *m_headerOpen = nullptr;
-    QFrame *m_dropZone = nullptr;
 };
