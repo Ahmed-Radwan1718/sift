@@ -133,10 +133,11 @@ QColor colorValue(const QDomElement &container,
             color.setGreenF(std::clamp(color.greenF() * amount, 0.0, 1.0));
             color.setBlueF(std::clamp(color.blueF() * amount, 0.0, 1.0));
         } else if (type == QLatin1String("lumMod") || type == QLatin1String("lumOff")) {
-            qreal h = 0, s = 0, l = 0, a = 0;
-            color.getHslF(&h, &s, &l, &a);
-            l = type == QLatin1String("lumMod") ? l * amount : l + amount;
-            color.setHslF(h, s, std::clamp(l, 0.0, 1.0), a);
+            float h = 0, sat = 0, l = 0, a = 0;
+            color.getHslF(&h, &sat, &l, &a);
+            l = static_cast<float>(type == QLatin1String("lumMod")
+                  ? l * amount : l + amount);
+            color.setHslF(h, sat, std::clamp(l, 0.0f, 1.0f), a);
         }
     }
     return color;
@@ -682,7 +683,7 @@ struct PptxDocument::Impl
                         if (localName(cell) != QLatin1String("tc"))
                             continue;
                         const qreal w = col < columnWidths.size()
-                            ? columnWidths.at(col) : rect.width() / std::max(1, columnWidths.size());
+                            ? columnWidths.at(col) : rect.width() / std::max(1, static_cast<int>(columnWidths.size()));
                         const QRectF cellRect(x, y, w, rowHeight);
                         const QColor fill = solidFill(child(cell, QStringLiteral("tcPr")), theme,
                                                        QColor(Qt::white));
