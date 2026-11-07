@@ -46,3 +46,37 @@ target_link_libraries(Sift PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets Qt6::Xm
 if(WIN32)
     target_link_libraries(Sift PRIVATE dwmapi)
 endif()
+
+# Developer-only smoke tests; no Python or test runtime is required by Sift users.
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_executable(PptxSmokeTest
+            tests/PptxSmokeTest.cpp
+            PptxDocument.h
+            PptxDocument.cpp
+            third_party/miniz/miniz.c
+            third_party/miniz/miniz_tinfl.c
+            third_party/miniz/miniz_zip.c
+        )
+        target_include_directories(PptxSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+        target_compile_definitions(PptxSmokeTest PRIVATE
+            MINIZ_NO_DEFLATE_APIS
+            MINIZ_NO_ARCHIVE_WRITING_APIS
+        )
+        target_link_libraries(PptxSmokeTest PRIVATE Qt6::Widgets Qt6::Xml)
+        add_test(NAME GenerateExamplePresentation
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/generate_sample.py"
+                "${CMAKE_CURRENT_BINARY_DIR}/example.pptx"
+        )
+        add_test(NAME PptxReadAndRender
+            COMMAND PptxSmokeTest "${CMAKE_CURRENT_BINARY_DIR}/example.pptx"
+        )
+        set_tests_properties(PptxReadAndRender PROPERTIES
+            DEPENDS GenerateExamplePresentation
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        )
+    endif()
+endif()
