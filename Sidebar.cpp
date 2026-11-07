@@ -1,6 +1,8 @@
 #include "Sidebar.h"
 
 #include <QColor>
+#include <QEasingCurve>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -11,13 +13,14 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStyle>
+#include <QVariantAnimation>
 #include <QVBoxLayout>
 
 #include <cmath>
 #include <utility>
 
 namespace {
-QIcon navigationIcon(const QString &name, bool active)
+QIcon navigationIcon(const QString &name, bool active, qreal angle = 0.0)
 {
     if (name == QLatin1String("settings")) {
         // Tint the original PNG using its alpha channel, keeping its shape.
@@ -36,7 +39,19 @@ QIcon navigationIcon(const QString &name, bool active)
             active ? QColor(QStringLiteral("#f0f0f0"))
                    : QColor(QStringLiteral("#a4a4a4")));
         iconPainter.end();
-        return QIcon(tinted);
+
+        // Rotate around the icon center, not the button or its label.
+        QPixmap rotated(44, 44);
+        rotated.fill(Qt::transparent);
+        QPainter rotationPainter(&rotated);
+        rotationPainter.setRenderHint(QPainter::Antialiasing);
+        rotationPainter.setRenderHint(QPainter::SmoothPixmapTransform);
+        rotationPainter.translate(22.0, 22.0);
+        rotationPainter.rotate(angle);
+        rotationPainter.translate(-22.0, -22.0);
+        rotationPainter.drawPixmap(0, 0, tinted);
+        rotationPainter.end();
+        return QIcon(rotated);
     }
 
     QPixmap pixmap(44, 44);
@@ -144,8 +159,25 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
     layout->addWidget(separator);
     layout->addSpacing(10);
 
-    addNavigationItem(QStringLiteral("settings"), QStringLiteral("Settings"),
-                      QStringLiteral("settings"), layout);
+    m_settingsButton = addNavigationItem(
+        QStringLiteral("settings"), QStringLiteral("Settings"),
+        QStringLiteral("settings"), layout);
+    m_settingsButton->installEventFilter(this);
+
+    m_settingsSpin = new QVariantAnimation(this);
+    m_settingsSpin->setStartValue(0.0);
+    m_settingsSpin->setEndValue(360.0);
+    m_settingsSpin->setDuration(1600);
+    m_settingsSpin->setEasingCurve(QEasingCurve::Linear);
+    m_settingsSpin->setLoopCount(-1);
+    connect(m_settingsSpin, &QVariantAnimation::valueChanged,
+            this, [this](const QVariant &value) {
+        m_settingsAngle = value.toReal();
+        m_settingsButton->setIcon(navigationIcon(
+            QStringLiteral("settings"),
+            m_activePage == QLatin1String("settings"),
+            m_settingsAngle));
+    });
 
     // Keep the collapse action available, without a branding header.
     auto *bottom = new QWidget(this);
@@ -171,6 +203,22 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
     });
 
     setCollapsed(QSettings().value(QStringLiteral("sidebarCollapsed"), false).toBool());
+}
+
+bool Sidebar::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_settingsButton) {
+        if (event->type() == QEvent::Enter) {
+            m_settingsSpin->start();
+        } else if (event->type() == QEvent::Leave) {
+            m_settingsSpin->stop();
+            m_settingsAngle = 0.0;
+            m_settingsButton->setIcon(navigationIcon(
+                QStringLiteral("settings"),
+                m_activePage == QLatin1String("settings")));
+        }
+    }
+    return QFrame::eventFilter(watched, event);
 }
 
 QPushButton *Sidebar::addNavigationItem(const QString &id,
@@ -227,7 +275,9 @@ void Sidebar::refreshAppearance()
     for (auto &item : m_items) {
         const bool active = item.id == m_activePage;
         item.button->setProperty("active", active);
-        item.button->setIcon(navigationIcon(item.iconName, active));
+        item.button->setIcon(navigationIcon(
+            item.iconName, active,
+            item.id == QLatin1String("settings") ? m_settingsAngle : 0.0));
         refreshStyle(item.button);
     }
 }
