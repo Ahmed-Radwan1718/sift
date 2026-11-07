@@ -125,12 +125,19 @@ DocumentDashboard::DocumentDashboard(Mode mode,
         section = QStringLiteral("Pinned documents");
     }
 
+    // The Home page shows the recent-files list directly.
+    // Keep the full search/filter header on Recent and Favorites pages.
+    auto *headingPanel = new QWidget(this);
+    auto *headingLayout = new QVBoxLayout(headingPanel);
+    headingLayout->setContentsMargins(0, 0, 0, 0);
+    headingLayout->setSpacing(0);
+
     auto *pageTitle = new QLabel(title, this);
     pageTitle->setObjectName(QStringLiteral("dashboardTitle"));
-    layout->addWidget(pageTitle);
-    layout->addSpacing(7);
-    layout->addWidget(descriptionLabel(subtitle, this));
-    layout->addSpacing(29);
+    headingLayout->addWidget(pageTitle);
+    headingLayout->addSpacing(7);
+    headingLayout->addWidget(descriptionLabel(subtitle, this));
+    headingLayout->addSpacing(29);
 
     m_search = new QLineEdit(this);
     m_search->setObjectName(QStringLiteral("documentSearch"));
@@ -145,8 +152,8 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     searchRow->setContentsMargins(0, 0, 0, 0);
     searchRow->addWidget(m_search);
     searchRow->addStretch(1);
-    layout->addLayout(searchRow);
-    layout->addSpacing(20);
+    headingLayout->addLayout(searchRow);
+    headingLayout->addSpacing(20);
 
     auto *filters = new QHBoxLayout;
     filters->setSpacing(8);
@@ -169,8 +176,10 @@ DocumentDashboard::DocumentDashboard(Mode mode,
         });
     }
     filters->addStretch(1);
-    layout->addLayout(filters);
-    layout->addSpacing(30);
+    headingLayout->addLayout(filters);
+    headingLayout->addSpacing(30);
+    headingPanel->setVisible(mode != Mode::Home);
+    layout->addWidget(headingPanel);
 
     auto *sectionRow = new QHBoxLayout;
     sectionRow->setSpacing(14);
@@ -273,6 +282,8 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     auto *findShortcut = new QShortcut(QKeySequence::Find, this);
     findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(findShortcut, &QShortcut::activated, this, [this]() {
+        if (m_mode == Mode::Home)
+            return;
         m_search->setFocus();
         m_search->selectAll();
     });
