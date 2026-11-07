@@ -23,6 +23,12 @@ qt_add_executable(Sift
     PdfViewerPage.cpp
 )
 
+# Embed the original Settings icon so it works from any installation path.
+qt_add_resources(Sift "sift_icons"
+    PREFIX "/"
+    FILES settings.png
+)
+
 target_link_libraries(Sift PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets)
 
 if(WIN32)
