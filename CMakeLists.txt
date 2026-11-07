@@ -39,7 +39,6 @@ qt_add_resources(Sift "sift_icons"
 # Only the read/decompression APIs are needed for PPTX files.
 target_compile_definitions(Sift PRIVATE
     MINIZ_NO_DEFLATE_APIS
-    MINIZ_NO_ARCHIVE_WRITING_APIS
 )
 target_link_libraries(Sift PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets Qt6::Xml)
 
@@ -63,8 +62,7 @@ if(BUILD_TESTING)
         target_include_directories(PptxSmokeTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
         target_compile_definitions(PptxSmokeTest PRIVATE
             MINIZ_NO_DEFLATE_APIS
-            MINIZ_NO_ARCHIVE_WRITING_APIS
-        )
+                )
         target_link_libraries(PptxSmokeTest PRIVATE Qt6::Widgets Qt6::Xml)
         add_test(NAME GenerateExamplePresentation
             COMMAND "${Python3_EXECUTABLE}"
