@@ -3,7 +3,6 @@
 #include <QColor>
 #include <QEasingCurve>
 #include <QEvent>
-#include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QPainter>
@@ -11,7 +10,6 @@
 #include <QPen>
 #include <QPixmap>
 #include <QPushButton>
-#include <QSettings>
 #include <QStyle>
 #include <QVariantAnimation>
 #include <QVBoxLayout>
@@ -132,6 +130,7 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
 {
     setObjectName(QStringLiteral("sidebar"));
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    setFixedWidth(220);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 18, 12, 16);
@@ -179,30 +178,7 @@ Sidebar::Sidebar(std::function<void(const QString &)> navigate, QWidget *parent)
             m_settingsAngle));
     });
 
-    // Keep the collapse action available, without a branding header.
-    auto *bottom = new QWidget(this);
-    auto *bottomLayout = new QHBoxLayout(bottom);
-    bottomLayout->setContentsMargins(7, 9, 3, 0);
-    bottomLayout->setSpacing(4);
-
-    m_footer = new QLabel(QStringLiteral("READ ONLY"), bottom);
-    m_footer->setObjectName(QStringLiteral("sidebarFooter"));
-    bottomLayout->addWidget(m_footer, 1);
-
-    m_toggle = new QPushButton(QStringLiteral("‹"), bottom);
-    m_toggle->setObjectName(QStringLiteral("sidebarToggle"));
-    m_toggle->setFixedSize(30, 30);
-    m_toggle->setToolTip(QStringLiteral("Collapse sidebar"));
-    m_toggle->setCursor(Qt::PointingHandCursor);
-    bottomLayout->addWidget(m_toggle);
-
-    layout->addWidget(bottom);
-
-    connect(m_toggle, &QPushButton::clicked, this, [this]() {
-        setCollapsed(!m_collapsed);
-    });
-
-    setCollapsed(QSettings().value(QStringLiteral("sidebarCollapsed"), false).toBool());
+    refreshAppearance();
 }
 
 bool Sidebar::eventFilter(QObject *watched, QEvent *event)
@@ -249,24 +225,6 @@ void Sidebar::setActivePage(const QString &pageId)
     if (m_activePage == pageId)
         return;
     m_activePage = pageId;
-    refreshAppearance();
-}
-
-void Sidebar::setCollapsed(bool collapsed)
-{
-    m_collapsed = collapsed;
-    setFixedWidth(collapsed ? 66 : 220);
-    m_section->setVisible(!collapsed);
-    m_footer->setVisible(!collapsed);
-
-    m_toggle->setText(collapsed ? QStringLiteral("›") : QStringLiteral("‹"));
-    m_toggle->setToolTip(collapsed ? QStringLiteral("Expand sidebar")
-                                 : QStringLiteral("Collapse sidebar"));
-    for (auto &item : m_items) {
-        item.button->setText(collapsed ? QString() : item.title);
-        item.button->setProperty("compact", collapsed);
-    }
-    QSettings().setValue(QStringLiteral("sidebarCollapsed"), collapsed);
     refreshAppearance();
 }
 
