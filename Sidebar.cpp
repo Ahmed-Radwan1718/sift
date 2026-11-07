@@ -79,16 +79,29 @@ QIcon navigationIcon(const QString &name, bool active)
         folder.quadTo(2, 7, 2.5, 7);
         painter.drawPath(folder);
     } else if (name == QLatin1String("settings")) {
-        painter.drawEllipse(QRectF(6.8, 6.8, 8.4, 8.4));
-        painter.drawEllipse(QRectF(9.2, 9.2, 3.6, 3.6));
+        // Draw a single connected eight-tooth gear, rather than a sunburst.
+        QPainterPath gear;
         constexpr qreal pi = 3.14159265358979323846;
+        constexpr qreal center = 11.0;
+        constexpr qreal rootRadius = 7.0;
+        constexpr qreal toothRadius = 9.3;
         for (int i = 0; i < 8; ++i) {
             const qreal angle = i * pi / 4;
-            painter.drawLine(QPointF(11 + 6.3 * std::cos(angle),
-                                     11 + 6.3 * std::sin(angle)),
-                             QPointF(11 + 9.2 * std::cos(angle),
-                                     11 + 9.2 * std::sin(angle)));
+            const qreal offsets[] = {-0.34, -0.22, -0.22, 0.22, 0.22, 0.34};
+            const qreal radii[] = {rootRadius, rootRadius, toothRadius,
+                                   toothRadius, rootRadius, rootRadius};
+            for (int j = 0; j < 6; ++j) {
+                const QPointF point(center + radii[j] * std::cos(angle + offsets[j]),
+                                    center + radii[j] * std::sin(angle + offsets[j]));
+                if (i == 0 && j == 0)
+                    gear.moveTo(point);
+                else
+                    gear.lineTo(point);
+            }
         }
+        gear.closeSubpath();
+        painter.drawPath(gear);
+        painter.drawEllipse(QRectF(8.45, 8.45, 5.1, 5.1));
     }
     painter.end();
     return QIcon(pixmap);
