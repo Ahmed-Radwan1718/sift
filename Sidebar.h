@@ -12,7 +12,7 @@ class QPushButton;
 class QVBoxLayout;
 class QVariantAnimation;
 
-// Sift's persistent left navigation. The layout can be expanded or collapsed.
+// Sift's persistent left navigation.
 class Sidebar final : public QFrame
 {
 public:
@@ -29,7 +29,6 @@ private:
                                    const QString &title,
                                    const QString &iconName,
                                    QVBoxLayout *target);
-    void setCollapsed(bool collapsed);
     void refreshAppearance();
 
     struct NavItem {
@@ -43,10 +42,7 @@ private:
     QVector<NavItem> m_items;
     QString m_activePage = QStringLiteral("home");
     QLabel *m_section = nullptr;
-    QLabel *m_footer = nullptr;
-    QPushButton *m_toggle = nullptr;
     QPushButton *m_settingsButton = nullptr;
     QVariantAnimation *m_settingsSpin = nullptr;
     qreal m_settingsAngle = 0.0;
-    bool m_collapsed = false;
 };
