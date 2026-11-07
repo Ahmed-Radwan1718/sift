@@ -2,6 +2,7 @@
 
 #include "third_party/miniz/miniz.h"
 
+#include <QBuffer>
 #include <QCache>
 #include <QColor>
 #include <QDir>
@@ -10,6 +11,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QHash>
+#include <QImageReader>
 #include <QPainter>
 #include <QPainterPath>
 #include <QTextDocument>
@@ -257,6 +259,7 @@ struct PptxDocument::Impl
     QVector<Slide> slides;
     QHash<QString, QColor> theme = fallbackTheme();
     mutable QCache<QString, QImage> imageCache{32 * 1024}; // cost in KB
+    mutable qint64 xmlBytesRead = 0;
 
     ~Impl()
     {
@@ -297,8 +300,10 @@ struct PptxDocument::Impl
     {
         bool found = false;
         const QByteArray source = entry(path, &found);
-        if (!found || source.isEmpty())
+        if (!found || source.isEmpty() ||
+            xmlBytesRead + source.size() > 192LL * 1024 * 1024)
             return false;
+        xmlBytesRead += source.size();
         QString msg;
         int line = 0, column = 0;
         return doc->setContent(source, false, &msg, &line, &column);
@@ -328,9 +333,17 @@ struct PptxDocument::Impl
         if (auto *cached = imageCache.object(path))
             return *cached;
         const QByteArray content = entry(path);
-        QImage image = QImage::fromData(content);
-        if (image.isNull() || image.width() > 12000 || image.height() > 12000 ||
-            static_cast<qint64>(image.width()) * image.height() > 25000000)
+        QBuffer buffer;
+        buffer.setData(content);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer);
+        const QSize dimensions = reader.size();
+        if (dimensions.isEmpty() || dimensions.width() > 12000 ||
+            dimensions.height() > 12000 ||
+            static_cast<qint64>(dimensions.width()) * dimensions.height() > 25000000)
+            return {};
+        const QImage image = reader.read();
+        if (image.isNull())
             return {};
         imageCache.insert(path, new QImage(image),
                           std::max(1, static_cast<int>(image.sizeInBytes() / 1024)));
@@ -359,7 +372,8 @@ struct PptxDocument::Impl
     }
 
     void drawText(QPainter &p, const QDomElement &txBody, const QRectF &box,
-                  qreal sx, qreal sy, QColor defaultColor) const
+                  qreal sx, qreal sy, QColor defaultColor,
+                  int defaultSize = 1800) const
     {
         if (txBody.isNull() || box.width() < 2 || box.height() < 2)
             return;
@@ -417,7 +431,7 @@ struct PptxDocument::Impl
                     const QDomElement style = prop.isNull() ? defaultRun : prop;
                     const int size = style.attribute(QStringLiteral("sz"),
                                     defaultRun.attribute(QStringLiteral("sz"),
-                                                        QStringLiteral("1800"))).toInt();
+                                                        QString::number(defaultSize))).toInt();
                     const qreal fontPx = std::clamp(size / 100.0 * fontPxPerPoint
                                                     * fitRatio * shrink, 7.0, 250.0);
                     const QColor color = solidFill(style, theme, defaultColor);
@@ -593,7 +607,13 @@ struct PptxDocument::Impl
                     p.drawPath(shapePath(preset, rect));
 
                 const QDomElement text = child(e, QStringLiteral("txBody"));
-                drawText(p, text, rect, sx, sy, theme.value(QStringLiteral("dk1"), Qt::black));
+                const QDomElement ph = descendant(child(e, QStringLiteral("nvSpPr")),
+                                                   QStringLiteral("ph"));
+                const QString type = ph.attribute(QStringLiteral("type"));
+                const int defaultSize = type == QLatin1String("title") ||
+                                        type == QLatin1String("ctrTitle") ? 3600 : 1800;
+                drawText(p, text, rect, sx, sy,
+                         theme.value(QStringLiteral("dk1"), Qt::black), defaultSize);
                 p.restore();
                 continue;
             }
