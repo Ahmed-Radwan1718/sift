@@ -32,26 +32,9 @@ int main(int argc, char *argv[])
             font-size: 10px;
             font-weight: 700;
         }
-        QLabel#sidebarFooter {
-            color: #626262;
-            font-size: 10px;
-            font-weight: 600;
-        }
         QFrame#sidebarRule {
             background-color: #353535;
             border: none;
-        }
-        QPushButton#sidebarToggle {
-            border: none;
-            border-radius: 6px;
-            background-color: transparent;
-            color: #9b9b9b;
-            font-size: 23px;
-            padding: 0px;
-        }
-        QPushButton#sidebarToggle:hover {
-            background-color: #303030;
-            color: #ffffff;
         }
         QPushButton#sidebarNav {
             background-color: transparent;
@@ -72,10 +55,6 @@ int main(int argc, char *argv[])
             color: #f2f2f2;
             border-left: 2px solid #dedede;
             font-weight: 600;
-        }
-        QPushButton#sidebarNav[compact="true"] {
-            text-align: center;
-            padding: 0px;
         }
         QToolButton#documentSidebarToggle {
             background-color: transparent;
