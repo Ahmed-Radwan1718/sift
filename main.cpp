@@ -301,38 +301,50 @@ int main(int argc, char *argv[])
             border-radius: 5px;
             font-size: 11px;
         }
-        QFrame#pdfToolbar {
-            background-color: #282828;
-            border-bottom: 1px solid #3a3a3a;
+        QFrame#floatingPdfToolbar {
+            background-color: #323232;
+            border: 1px solid #505050;
+            border-radius: 22px;
+        }
+        QFrame#floatingPdfDivider {
+            background-color: #595959;
+            border: none;
         }
         QPushButton#pdfControl {
-            background-color: #333333;
-            border: 1px solid #454545;
-            border-radius: 6px;
-            padding: 7px 10px;
+            color: #e6e6e6;
+            background-color: transparent;
+            border: none;
+            border-radius: 7px;
+            padding: 0;
+            font-size: 17px;
         }
         QPushButton#pdfControl:hover:enabled {
-            background-color: #434343;
+            background-color: #494949;
+        }
+        QPushButton#pdfControl:pressed:enabled {
+            background-color: #5a5a5a;
         }
         QPushButton#pdfControl:disabled {
-            color: #666666;
-            background-color: #2b2b2b;
-            border-color: #333333;
+            color: #777777;
         }
-        QLabel#pdfToolbarText {
-            color: #c8c8c8;
-            font-size: 13px;
+        QLabel#floatingPdfText {
+            color: #d9d9d9;
+            font-size: 12px;
+        }
+        QSpinBox#floatingPdfPageInput {
+            background-color: #414141;
+            color: #f0f0f0;
+            border: 1px solid #555555;
+            border-radius: 6px;
+            padding: 0 3px;
+            font-size: 12px;
+        }
+        QSpinBox#floatingPdfPageInput:focus {
+            border: 1px solid #929292;
         }
         QLabel#pdfMessage {
             color: #b6b6b6;
             font-size: 15px;
-        }
-        QSpinBox#pdfPageInput {
-            color: #eeeeee;
-            background-color: #343434;
-            border: 1px solid #4a4a4a;
-            border-radius: 5px;
-            padding: 5px;
         }
         QFrame#rowDivider {
             border: none;

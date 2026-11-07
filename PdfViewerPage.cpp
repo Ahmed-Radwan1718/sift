@@ -1,5 +1,6 @@
 #include "PdfViewerPage.h"
 
+#include <QCursor>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
@@ -50,57 +51,6 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    auto *toolbar = new QFrame(this);
-    toolbar->setObjectName(QStringLiteral("pdfToolbar"));
-    auto *controls = new QHBoxLayout(toolbar);
-    controls->setContentsMargins(18, 9, 18, 9);
-    controls->setSpacing(8);
-
-    m_previous = toolbarButton(QStringLiteral("‹"), QStringLiteral("Previous page"), toolbar);
-    m_next = toolbarButton(QStringLiteral("›"), QStringLiteral("Next page"), toolbar);
-    m_previous->setFixedWidth(34);
-    m_next->setFixedWidth(34);
-
-    m_pageInput = new QSpinBox(toolbar);
-    m_pageInput->setObjectName(QStringLiteral("pdfPageInput"));
-    m_pageInput->setRange(1, 1);
-    m_pageInput->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    m_pageInput->setAlignment(Qt::AlignCenter);
-    m_pageInput->setFixedWidth(55);
-    m_pageInput->setToolTip(QStringLiteral("Go to page"));
-
-    m_pageTotal = new QLabel(QStringLiteral("/ 0"), toolbar);
-    m_pageTotal->setObjectName(QStringLiteral("pdfToolbarText"));
-
-    controls->addWidget(m_previous);
-    controls->addWidget(m_pageInput);
-    controls->addWidget(m_pageTotal);
-    controls->addWidget(m_next);
-    controls->addStretch(1);
-
-    m_zoomOut = toolbarButton(QStringLiteral("−"), QStringLiteral("Zoom out"), toolbar);
-    m_zoomIn = toolbarButton(QStringLiteral("+"), QStringLiteral("Zoom in"), toolbar);
-    m_zoomOut->setFixedWidth(36);
-    m_zoomIn->setFixedWidth(36);
-
-    m_zoomLabel = new QLabel(QStringLiteral("Fit width"), toolbar);
-    m_zoomLabel->setObjectName(QStringLiteral("pdfToolbarText"));
-    m_zoomLabel->setMinimumWidth(70);
-    m_zoomLabel->setAlignment(Qt::AlignCenter);
-
-    m_fitWidth = toolbarButton(QStringLiteral("Fit width"),
-                               QStringLiteral("Fit page width to window"), toolbar);
-    m_fitPage = toolbarButton(QStringLiteral("Fit page"),
-                              QStringLiteral("Fit entire page to window"), toolbar);
-
-    controls->addWidget(m_zoomOut);
-    controls->addWidget(m_zoomLabel);
-    controls->addWidget(m_zoomIn);
-    controls->addSpacing(8);
-    controls->addWidget(m_fitWidth);
-    controls->addWidget(m_fitPage);
-    layout->addWidget(toolbar);
-
     m_stack = new QStackedWidget(this);
 
     // Keep the actual PDF renderer in the stack for the life of this tab.
@@ -113,6 +63,91 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     // QAbstractScrollArea delivers wheel events to its viewport widget.
     // Intercept Ctrl+wheel before the built-in scroll handling.
     m_view->viewport()->installEventFilter(this);
+    m_view->viewport()->setMouseTracking(true);
+
+    // The toolbar is a child of the PDF viewport, not a layout row:
+    // it floats over the document without reducing the reading area.
+    m_floatingControls = new QFrame(m_view->viewport());
+    m_floatingControls->setObjectName(QStringLiteral("floatingPdfToolbar"));
+    auto *controls = new QHBoxLayout(m_floatingControls);
+    controls->setContentsMargins(12, 9, 12, 9);
+    controls->setSpacing(5);
+
+    m_previous = toolbarButton(QStringLiteral("‹"), QStringLiteral("Previous page"),
+                               m_floatingControls);
+    m_next = toolbarButton(QStringLiteral("›"), QStringLiteral("Next page"),
+                           m_floatingControls);
+    m_previous->setFixedSize(29, 29);
+    m_next->setFixedSize(29, 29);
+
+    m_pageInput = new QSpinBox(m_floatingControls);
+    m_pageInput->setObjectName(QStringLiteral("floatingPdfPageInput"));
+    m_pageInput->setRange(1, 1);
+    m_pageInput->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    m_pageInput->setAlignment(Qt::AlignCenter);
+    m_pageInput->setFixedSize(45, 29);
+    m_pageInput->setToolTip(QStringLiteral("Jump to page"));
+
+    m_pageTotal = new QLabel(QStringLiteral("/ 0"), m_floatingControls);
+    m_pageTotal->setObjectName(QStringLiteral("floatingPdfText"));
+    m_pageTotal->setMinimumWidth(35);
+
+    auto addDivider = [this, controls]() {
+        auto *divider = new QFrame(m_floatingControls);
+        divider->setObjectName(QStringLiteral("floatingPdfDivider"));
+        divider->setFixedSize(1, 20);
+        controls->addSpacing(8);
+        controls->addWidget(divider);
+        controls->addSpacing(8);
+    };
+
+    controls->addWidget(m_previous);
+    controls->addWidget(m_pageInput);
+    controls->addWidget(m_pageTotal);
+    controls->addWidget(m_next);
+    addDivider();
+
+    m_zoomOut = toolbarButton(QStringLiteral("−"), QStringLiteral("Zoom out"),
+                              m_floatingControls);
+    m_zoomIn = toolbarButton(QStringLiteral("+"), QStringLiteral("Zoom in"),
+                             m_floatingControls);
+    m_zoomOut->setFixedSize(29, 29);
+    m_zoomIn->setFixedSize(29, 29);
+    m_zoomLabel = new QLabel(QStringLiteral("Fit width"), m_floatingControls);
+    m_zoomLabel->setObjectName(QStringLiteral("floatingPdfText"));
+    m_zoomLabel->setFixedWidth(65);
+    m_zoomLabel->setAlignment(Qt::AlignCenter);
+
+    controls->addWidget(m_zoomOut);
+    controls->addWidget(m_zoomLabel);
+    controls->addWidget(m_zoomIn);
+    addDivider();
+
+    m_fitWidth = toolbarButton(QStringLiteral("↔"),
+                               QStringLiteral("Fit page width"), m_floatingControls);
+    m_fitPage = toolbarButton(QStringLiteral("⛶"),
+                              QStringLiteral("Fit entire page"), m_floatingControls);
+    m_fitWidth->setFixedSize(29, 29);
+    m_fitPage->setFixedSize(29, 29);
+    controls->addWidget(m_fitWidth);
+    controls->addWidget(m_fitPage);
+
+    m_floatingControls->adjustSize();
+    m_floatingControls->hide();
+
+    m_controlsHideTimer = new QTimer(this);
+    m_controlsHideTimer->setSingleShot(true);
+    connect(m_controlsHideTimer, &QTimer::timeout, this, [this]() {
+        if (!m_floatingControls || !m_floatingControls->isVisible())
+            return;
+        // A user interacting with the controls should never lose them.
+        const QPoint pointer = m_floatingControls->mapFromGlobal(QCursor::pos());
+        if (m_floatingControls->rect().contains(pointer)) {
+            m_controlsHideTimer->start(1200);
+            return;
+        }
+        m_floatingControls->hide();
+    });
 
     // Coalesce rapid Ctrl+wheel events into one PDF cache update.
     // Do not cover the viewport: ordinary scrolling must never be blocked
@@ -209,8 +244,12 @@ void PdfViewerPage::handleStatus(QPdfDocument::Status status)
     if (ready) {
         m_stack->setCurrentWidget(m_view);
         updatePageControls();
+        showFloatingControls();
         return;
     }
+
+    if (m_floatingControls)
+        m_floatingControls->hide();
 
     if (status == QPdfDocument::Status::Error) {
         QString details = QStringLiteral("The file may be damaged or is not a valid PDF.");
@@ -262,27 +301,63 @@ void PdfViewerPage::updatePageControls()
 
 bool PdfViewerPage::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_view->viewport() && event->type() == QEvent::Wheel) {
-        auto *wheel = static_cast<QWheelEvent *>(event);
-
-        if (wheel->modifiers().testFlag(Qt::ControlModifier)) {
-            if (m_document->status() == QPdfDocument::Status::Ready) {
-                // A standard wheel notch is 120 angle units; trackpads may
-                // report smaller angles or only pixel deltas.
-                qreal steps = wheel->angleDelta().y() / 120.0;
-                if (qFuzzyIsNull(steps))
-                    steps = wheel->pixelDelta().y() / 100.0;
-
-                if (!qFuzzyIsNull(steps))
-                    queueZoom(std::pow(1.15, steps));
+    if (watched == m_view->viewport()) {
+        if (event->type() == QEvent::Resize) {
+            positionFloatingControls();
+        } else if (event->type() == QEvent::MouseMove ||
+                   event->type() == QEvent::Enter) {
+            // Reveal controls when the pointer approaches the bottom edge.
+            const QPoint pointer = m_view->viewport()->mapFromGlobal(QCursor::pos());
+            if (pointer.y() >= m_view->viewport()->height() - 110 &&
+                m_document->status() == QPdfDocument::Status::Ready)
+                showFloatingControls();
+        } else if (event->type() == QEvent::Wheel) {
+            auto *wheel = static_cast<QWheelEvent *>(event);
+            if (wheel->modifiers().testFlag(Qt::ControlModifier)) {
+                if (m_document->status() == QPdfDocument::Status::Ready) {
+                    qreal steps = wheel->angleDelta().y() / 120.0;
+                    if (qFuzzyIsNull(steps))
+                        steps = wheel->pixelDelta().y() / 100.0;
+                    if (!qFuzzyIsNull(steps)) {
+                        queueZoom(std::pow(1.15, steps));
+                        showFloatingControls();
+                    }
+                }
+                wheel->accept();
+                return true;
             }
-
-            // Ctrl+wheel zooms; don't scroll the document as well.
-            wheel->accept();
-            return true;
         }
     }
+    // The PDF viewer keeps handling regular wheel events and scrolling.
     return QWidget::eventFilter(watched, event);
+}
+
+void PdfViewerPage::positionFloatingControls()
+{
+    if (!m_floatingControls || !m_view)
+        return;
+
+    const QRect viewportRect = m_view->viewport()->rect();
+    const int width = std::min(m_floatingControls->sizeHint().width(),
+                               std::max(1, viewportRect.width() - 16));
+    const int height = m_floatingControls->sizeHint().height();
+    if (viewportRect.width() < 1 || viewportRect.height() < 1)
+        return;
+
+    const int x = (viewportRect.width() - width) / 2;
+    const int y = std::max(8, viewportRect.height() - height - 20);
+    m_floatingControls->setGeometry(x, y, width, height);
+    m_floatingControls->raise();
+}
+
+void PdfViewerPage::showFloatingControls()
+{
+    if (!m_floatingControls || m_document->status() != QPdfDocument::Status::Ready)
+        return;
+    positionFloatingControls();
+    m_floatingControls->show();
+    m_floatingControls->raise();
+    m_controlsHideTimer->start(2600);
 }
 
 qreal PdfViewerPage::effectiveZoomFactor() const

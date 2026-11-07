@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QEvent;
+class QFrame;
 class QLabel;
 class QPushButton;
 class QPdfView;
@@ -29,10 +30,14 @@ private:
     void queueZoom(qreal multiplier);
     void applyPendingZoom();
     qreal effectiveZoomFactor() const;
+    void positionFloatingControls();
+    void showFloatingControls();
 
     QPdfDocument *m_document = nullptr;
     QPdfView *m_view = nullptr;
     QStackedWidget *m_stack = nullptr;
+    QFrame *m_floatingControls = nullptr;
+    QTimer *m_controlsHideTimer = nullptr;
     QWidget *m_messagePage = nullptr;
     QLabel *m_message = nullptr;
     QSpinBox *m_pageInput = nullptr;
