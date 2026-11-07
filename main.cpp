@@ -77,11 +77,6 @@ int main(int argc, char *argv[])
             text-align: center;
             padding: 0px;
         }
-        QLabel#headerTitle {
-            font-size: 14px;
-            font-weight: 600;
-            color: #e9e9e9;
-        }
         QToolButton#documentSidebarToggle {
             background-color: transparent;
             border: none;
@@ -218,10 +213,6 @@ int main(int argc, char *argv[])
             font-size: 18px;
             font-weight: 600;
             color: #e5e5e5;
-        }
-        QFrame#topBar {
-            background-color: #202020;
-            border-bottom: 1px solid #353535;
         }
         QLabel#logoMark {
             background-color: #383838;
