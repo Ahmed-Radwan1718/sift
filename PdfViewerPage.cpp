@@ -1,6 +1,5 @@
 #include "PdfViewerPage.h"
 
-#include <QColor>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
@@ -9,13 +8,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMargins>
-#include <QPdfDocumentRenderOptions>
 #include <QPdfPageNavigator>
-#include <QPdfPageRenderer>
 #include <QPdfView>
-#include <QPainter>
-#include <QPaintEvent>
-#include <QPixmap>
 #include <QPointF>
 #include <QPushButton>
 #include <QScreen>
@@ -29,53 +23,6 @@
 #include <algorithm>
 #include <cmath>
 
-
-// Keep the last rendered frame on screen while Qt rebuilds the PDF page
-// raster cache. Scale this snapshot immediately so Ctrl+wheel stays responsive.
-class ZoomPreviewOverlay final : public QWidget
-{
-public:
-    explicit ZoomPreviewOverlay(QWidget *parent)
-        : QWidget(parent)
-    {
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-        setAttribute(Qt::WA_OpaquePaintEvent);
-        hide();
-    }
-
-    void capture(const QPixmap &image)
-    {
-        m_snapshot = image;
-        m_ratio = 1.0;
-    }
-
-    void preview(qreal ratio, QPointF anchor)
-    {
-        m_ratio = ratio;
-        m_anchor = anchor;
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter painter(this);
-        painter.fillRect(rect(), QColor(QStringLiteral("#202020")));
-        if (m_snapshot.isNull())
-            return;
-
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.translate(m_anchor);
-        painter.scale(m_ratio, m_ratio);
-        painter.translate(-m_anchor);
-        painter.drawPixmap(QPointF(0, 0), m_snapshot);
-    }
-
-private:
-    QPixmap m_snapshot;
-    qreal m_ratio = 1.0;
-    QPointF m_anchor;
-};
 
 namespace {
 QPushButton *toolbarButton(const QString &label, const QString &tooltip,
@@ -167,47 +114,15 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     // Intercept Ctrl+wheel before the built-in scroll handling.
     m_view->viewport()->installEventFilter(this);
 
-    m_zoomPreview = new ZoomPreviewOverlay(m_view->viewport());
+    // Coalesce rapid Ctrl+wheel events into one PDF cache update.
+    // Do not cover the viewport: ordinary scrolling must never be blocked
+    // while Qt renders pages at the new zoom level.
     m_zoomTimer = new QTimer(this);
     m_zoomTimer->setSingleShot(true);
-    m_zoomTimer->setInterval(85);
+    m_zoomTimer->setInterval(45);
     connect(m_zoomTimer, &QTimer::timeout,
             this, [this]() { applyPendingZoom(); });
 
-    // QPdfView owns its worker renderer. It paints white pages when its cache
-    // is invalidated; unveil the new frame only after its render completes.
-    // If a Qt version changes this internal child, the fallback timer below
-    // still prevents the preview from staying onscreen indefinitely.
-    if (auto *renderer = m_view->findChild<QPdfPageRenderer *>()) {
-        connect(renderer, &QPdfPageRenderer::pageRendered, this,
-            [this](int page, QSize imageSize, const QImage &,
-                   QPdfDocumentRenderOptions, quint64) {
-                if (!m_waitingForRender || m_zoomTimer->isActive() ||
-                    m_document->status() != QPdfDocument::Status::Ready ||
-                    page < 0 || page >= m_document->pageCount())
-                    return;
-
-                const auto *screen = QGuiApplication::primaryScreen();
-                const qreal dpiScale =
-                    (screen ? screen->logicalDotsPerInch() : 96.0) / 72.0;
-                const QSize pageSize =
-                    (m_document->pagePointSize(page) * dpiScale *
-                     effectiveZoomFactor()).toSize();
-                const QSize expectedSize =
-                    (QSizeF(pageSize) * m_view->devicePixelRatioF()).toSize();
-
-                if (std::abs(expectedSize.width() - imageSize.width()) > 2 ||
-                    std::abs(expectedSize.height() - imageSize.height()) > 2)
-                    return; // An older zoom request finished late.
-
-                const quint64 generation = m_renderGeneration;
-                QTimer::singleShot(45, this, [this, generation]() {
-                    if (m_waitingForRender && m_renderGeneration == generation &&
-                        !m_zoomTimer->isActive())
-                        finishZoomPreview();
-                });
-            });
-    }
     m_stack->addWidget(m_view);
 
     m_messagePage = new QWidget(m_stack);
@@ -247,10 +162,14 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     connect(m_zoomIn, &QPushButton::clicked,
             this, [this]() { changeZoom(1.25); });
     connect(m_fitWidth, &QPushButton::clicked, this, [this]() {
-        changeFitMode(static_cast<int>(QPdfView::ZoomMode::FitToWidth));
+        m_zoomTimer->stop();
+        m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+        updateZoomLabel();
     });
     connect(m_fitPage, &QPushButton::clicked, this, [this]() {
-        changeFitMode(static_cast<int>(QPdfView::ZoomMode::FitInView));
+        m_zoomTimer->stop();
+        m_view->setZoomMode(QPdfView::ZoomMode::FitInView);
+        updateZoomLabel();
     });
     connect(m_view, &QPdfView::zoomFactorChanged,
             this, [this](qreal) { updateZoomLabel(); });
@@ -355,7 +274,7 @@ bool PdfViewerPage::eventFilter(QObject *watched, QEvent *event)
                     steps = wheel->pixelDelta().y() / 100.0;
 
                 if (!qFuzzyIsNull(steps))
-                    queueZoom(std::pow(1.15, steps), wheel->position());
+                    queueZoom(std::pow(1.15, steps));
             }
 
             // Ctrl+wheel zooms; don't scroll the document as well.
@@ -397,115 +316,38 @@ qreal PdfViewerPage::effectiveZoomFactor() const
     return std::min(fitWidth, availableHeight / (points.height() * resolution));
 }
 
-void PdfViewerPage::beginZoomPreview(const QPointF &anchor)
-{
-    if (m_zoomPreview->isVisible())
-        return;
-
-    m_previewBaseZoom = effectiveZoomFactor();
-    m_pendingZoom = m_previewBaseZoom;
-    m_zoomPreview->capture(m_view->viewport()->grab());
-    m_zoomPreview->setGeometry(m_view->viewport()->rect());
-    m_zoomPreview->preview(1.0, anchor);
-    m_zoomPreview->show();
-    m_zoomPreview->raise();
-}
-
-void PdfViewerPage::queueZoom(qreal multiplier, const QPointF &anchor)
+void PdfViewerPage::queueZoom(qreal multiplier)
 {
     if (m_document->status() != QPdfDocument::Status::Ready)
         return;
 
-    beginZoomPreview(anchor);
-
-    // Accumulate wheel events but rebuild PDF bitmaps only after input settles.
-    // This avoids repeated cache invalidations for every trackpad delta.
-    m_pendingZoom = std::clamp(m_pendingZoom * multiplier, 0.25, 4.0);
-    m_zoomPreview->preview(m_pendingZoom / m_previewBaseZoom, anchor);
-    m_waitingForRender = false;
+    // Accumulate rapid events without covering the document or stalling
+    // normal scrolling. The actual PDF redraw is triggered just once.
+    const qreal base = m_zoomTimer->isActive()
+        ? m_pendingZoom : effectiveZoomFactor();
+    m_pendingZoom = std::clamp(base * multiplier, 0.25, 4.0);
     m_zoomTimer->start();
     updateZoomLabel();
 }
 
 void PdfViewerPage::applyPendingZoom()
 {
-    if (m_document->status() != QPdfDocument::Status::Ready) {
-        finishZoomPreview();
-        return;
-    }
-
-    const qreal existingZoom = effectiveZoomFactor();
-    if (std::abs(m_pendingZoom - existingZoom) < 0.0001 &&
-        m_view->zoomMode() == QPdfView::ZoomMode::Custom) {
-        finishZoomPreview();
-        return;
-    }
-
-    m_waitingForRender = true;
-    ++m_renderGeneration;
-    m_view->setZoomMode(QPdfView::ZoomMode::Custom);
-    m_view->setZoomFactor(m_pendingZoom);
-    updateZoomLabel();
-    waitForRenderedPage();
-}
-
-void PdfViewerPage::waitForRenderedPage()
-{
-    const quint64 generation = m_renderGeneration;
-
-    // Avoid an indefinitely frozen preview if rendering fails or the Qt
-    // renderer implementation changes. Normally pageRendered removes it.
-    QTimer::singleShot(3000, this, [this, generation]() {
-        if (m_renderGeneration == generation && m_waitingForRender &&
-            !m_zoomTimer->isActive())
-            finishZoomPreview();
-    });
-}
-
-void PdfViewerPage::finishZoomPreview()
-{
-    m_waitingForRender = false;
-    m_zoomTimer->stop();
-    if (m_zoomPreview->isVisible()) {
-        // Paint the completed cache behind the snapshot before exposing it.
-        m_view->viewport()->repaint();
-        m_zoomPreview->hide();
-    }
-    updateZoomLabel();
-}
-
-void PdfViewerPage::changeFitMode(int mode)
-{
     if (m_document->status() != QPdfDocument::Status::Ready)
         return;
 
-    const auto newMode = static_cast<QPdfView::ZoomMode>(mode);
-    if (m_view->zoomMode() == newMode && !m_zoomTimer->isActive())
-        return;
-
-    beginZoomPreview(QPointF(m_view->viewport()->rect().center()));
-    m_zoomTimer->stop();
-    m_waitingForRender = true;
-    ++m_renderGeneration;
-
-    m_view->setZoomMode(newMode);
-    m_pendingZoom = effectiveZoomFactor();
-    m_zoomPreview->preview(m_pendingZoom / m_previewBaseZoom,
-                           QPointF(m_view->viewport()->rect().center()));
-
+    m_view->setZoomMode(QPdfView::ZoomMode::Custom);
+    m_view->setZoomFactor(m_pendingZoom);
     updateZoomLabel();
-    waitForRenderedPage();
 }
 
 void PdfViewerPage::changeZoom(qreal multiplier)
 {
-    queueZoom(multiplier, QPointF(m_view->viewport()->rect().center()));
+    queueZoom(multiplier);
 }
 
 void PdfViewerPage::updateZoomLabel()
 {
-    if (m_zoomPreview && m_zoomPreview->isVisible() &&
-        m_zoomTimer && m_zoomTimer->isActive()) {
+    if (m_zoomTimer && m_zoomTimer->isActive()) {
         m_zoomLabel->setText(QStringLiteral("%1%")
             .arg(qRound(m_pendingZoom * 100.0)));
         return;

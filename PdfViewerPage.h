@@ -2,7 +2,6 @@
 
 #include <QPdfDocument>
 #include <QWidget>
-#include <QPointF>
 
 class QEvent;
 class QLabel;
@@ -11,7 +10,6 @@ class QPdfView;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
-class ZoomPreviewOverlay;
 
 // Read-only PDF viewer: each tab owns its own document and controls.
 class PdfViewerPage final : public QWidget
@@ -28,12 +26,8 @@ private:
     void updateZoomLabel();
     void jumpToPage(int pageIndex);
     void changeZoom(qreal multiplier);
-    void queueZoom(qreal multiplier, const QPointF &anchor);
-    void beginZoomPreview(const QPointF &anchor);
+    void queueZoom(qreal multiplier);
     void applyPendingZoom();
-    void waitForRenderedPage();
-    void finishZoomPreview();
-    void changeFitMode(int mode);
     qreal effectiveZoomFactor() const;
 
     QPdfDocument *m_document = nullptr;
@@ -50,10 +44,6 @@ private:
     QPushButton *m_zoomIn = nullptr;
     QPushButton *m_fitWidth = nullptr;
     QPushButton *m_fitPage = nullptr;
-    ZoomPreviewOverlay *m_zoomPreview = nullptr;
     QTimer *m_zoomTimer = nullptr;
     qreal m_pendingZoom = 1.0;
-    qreal m_previewBaseZoom = 1.0;
-    bool m_waitingForRender = false;
-    quint64 m_renderGeneration = 0;
 };
