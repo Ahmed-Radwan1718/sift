@@ -10,7 +10,6 @@ class QDragMoveEvent;
 class QDropEvent;
 class QFrame;
 class QLabel;
-class QPushButton;
 class QStackedWidget;
 class Sidebar;
 class QTabWidget;
@@ -37,7 +36,7 @@ private:
                                    const QString &description);
     QWidget *createDocumentPage(const QString &filePath);
     void showSection(const QString &section);
-    void updateCurrentTabHeader();
+    void updateCurrentTabNavigation();
     bool isDocumentActive() const;
     void updateSidebarVisibility();
     void toggleDocumentSidebar();
@@ -56,8 +55,6 @@ private:
     DocumentDashboard *m_homeDashboard = nullptr;
     DocumentDashboard *m_recentDashboard = nullptr;
     DocumentDashboard *m_favoritesDashboard = nullptr;
-    QLabel *m_headerTitle = nullptr;
-    QPushButton *m_headerOpen = nullptr;
     QToolButton *m_sidebarVisibilityButton = nullptr;
     bool m_documentSidebarHidden = false;
 };
