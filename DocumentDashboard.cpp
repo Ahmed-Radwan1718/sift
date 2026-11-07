@@ -137,8 +137,15 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     m_search->setPlaceholderText(QStringLiteral("Search documents by name..."));
     m_search->setClearButtonEnabled(true);
     m_search->setMinimumHeight(43);
+    m_search->setMaximumWidth(600);
     m_search->setAccessibleName(QStringLiteral("Search documents by name"));
-    layout->addWidget(m_search);
+
+    // Keep the search field compact rather than stretching across the dashboard.
+    auto *searchRow = new QHBoxLayout;
+    searchRow->setContentsMargins(0, 0, 0, 0);
+    searchRow->addWidget(m_search);
+    searchRow->addStretch(1);
+    layout->addLayout(searchRow);
     layout->addSpacing(20);
 
     auto *filters = new QHBoxLayout;
