@@ -54,13 +54,19 @@ QDomElement descendant(const QDomElement &e, const QString &name)
 
 QString namespacedAttribute(const QDomElement &e, const QString &name)
 {
+    // For slide IDs both "id" and "r:id" can exist. The relationship is
+    // namespaced; preferring the plain "id" loses the target slide.
     const QDomNamedNodeMap attrs = e.attributes();
+    QString plain;
     for (int i = 0; i < attrs.length(); ++i) {
         const QDomNode a = attrs.item(i);
-        if (a.nodeName().section(QLatin1Char(':'), -1) == name)
+        if (a.nodeName().section(QLatin1Char(':'), -1) != name)
+            continue;
+        if (a.nodeName().contains(QLatin1Char(':')))
             return a.nodeValue();
+        plain = a.nodeValue();
     }
-    return {};
+    return plain;
 }
 
 QString partRelativeTo(const QString &owner, QString target)
