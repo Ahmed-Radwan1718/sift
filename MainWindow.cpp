@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "DocumentDashboard.h"
 #include "PdfViewerPage.h"
+#include "PresentationViewerPage.h"
 #include "Sidebar.h"
 
 #include <QColor>
@@ -328,8 +329,11 @@ QWidget *MainWindow::createHomePage()
 
 QWidget *MainWindow::createDocumentPage(const QString &filePath)
 {
-    if (QFileInfo(filePath).suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0)
+    const QString extension = QFileInfo(filePath).suffix().toLower();
+    if (extension == QLatin1String("pdf"))
         return new PdfViewerPage(filePath);
+    if (extension == QLatin1String("pptx"))
+        return new PresentationViewerPage(filePath);
 
     auto *page = new QWidget;
     page->setObjectName(QStringLiteral("documentPage"));
