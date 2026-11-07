@@ -122,37 +122,21 @@ MainWindow::MainWindow(QWidget *parent)
     contentLayout->setSpacing(0);
     rootLayout->addWidget(mainArea, 1);
 
-    auto *topBar = new QFrame(mainArea);
-    topBar->setObjectName(QStringLiteral("topBar"));
-    topBar->setFixedHeight(64);
-    auto *topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(18, 0, 27, 0);
-    topLayout->setSpacing(12);
-
-    m_sidebarVisibilityButton = new QToolButton(topBar);
-    m_sidebarVisibilityButton->setObjectName(QStringLiteral("documentSidebarToggle"));
-    m_sidebarVisibilityButton->setFixedSize(34, 34);
-    m_sidebarVisibilityButton->setIconSize(QSize(20, 20));
-    m_sidebarVisibilityButton->setCursor(Qt::PointingHandCursor);
-    m_sidebarVisibilityButton->setVisible(false);
-    topLayout->addWidget(m_sidebarVisibilityButton);
-
-    m_headerTitle = new QLabel(QStringLiteral("Home"), topBar);
-    m_headerTitle->setObjectName(QStringLiteral("headerTitle"));
-    topLayout->addWidget(m_headerTitle);
-    topLayout->addStretch();
-
-    m_headerOpen = new QPushButton(QStringLiteral("Open files"), topBar);
-    m_headerOpen->setObjectName(QStringLiteral("subtleButton"));
-    m_headerOpen->setCursor(Qt::PointingHandCursor);
-    topLayout->addWidget(m_headerOpen);
-    contentLayout->addWidget(topBar);
-
     m_tabs = new QTabWidget(mainArea);
     m_tabs->setObjectName(QStringLiteral("documentTabs"));
     m_tabs->setDocumentMode(true);
     m_tabs->setTabsClosable(true);
     m_tabs->setMovable(false);
+
+    // Keep the document sidebar control accessible without a permanent header.
+    // The tab bar is hidden on Home, so this uses no space until a file is open.
+    m_sidebarVisibilityButton = new QToolButton(m_tabs);
+    m_sidebarVisibilityButton->setObjectName(QStringLiteral("documentSidebarToggle"));
+    m_sidebarVisibilityButton->setFixedSize(34, 34);
+    m_sidebarVisibilityButton->setIconSize(QSize(20, 20));
+    m_sidebarVisibilityButton->setCursor(Qt::PointingHandCursor);
+    m_sidebarVisibilityButton->setVisible(false);
+    m_tabs->setCornerWidget(m_sidebarVisibilityButton, Qt::TopRightCorner);
 
     m_tabs->addTab(createHomePage(), QStringLiteral("Home"));
     m_tabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
@@ -172,9 +156,6 @@ MainWindow::MainWindow(QWidget *parent)
     contentLayout->addWidget(m_mainStack, 1);
     setCentralWidget(root);
 
-    connect(m_headerOpen, &QPushButton::clicked,
-            this, &MainWindow::openFilesDialog);
-
     connect(m_sidebarVisibilityButton, &QToolButton::clicked,
             this, &MainWindow::toggleDocumentSidebar);
 
@@ -186,7 +167,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::toggleDocumentSidebar);
 
     connect(m_tabs, &QTabWidget::currentChanged, this, [this](int) {
-        updateCurrentTabHeader();
+        updateCurrentTabNavigation();
     });
 
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
@@ -201,12 +182,12 @@ MainWindow::MainWindow(QWidget *parent)
             m_tabs->setCurrentIndex(0);
 
         refreshTabVisibility();
-        updateCurrentTabHeader();
+        updateCurrentTabNavigation();
     });
 
     refreshDashboards();
     refreshTabVisibility();
-    updateCurrentTabHeader();
+    updateCurrentTabNavigation();
 }
 
 void MainWindow::showSection(const QString &section)
@@ -214,26 +195,21 @@ void MainWindow::showSection(const QString &section)
     if (section == QLatin1String("home")) {
         m_mainStack->setCurrentWidget(m_tabs);
         m_tabs->setCurrentIndex(0);
-        updateCurrentTabHeader();
+        updateCurrentTabNavigation();
         return;
     }
 
     int index = -1;
-    QString title;
     if (section == QLatin1String("recent")) {
         index = 1;
-        title = QStringLiteral("Recent");
         refreshDashboards();
     } else if (section == QLatin1String("favorites")) {
         index = 2;
-        title = QStringLiteral("Favorites");
         refreshDashboards();
     } else if (section == QLatin1String("folders")) {
         index = 3;
-        title = QStringLiteral("Folders");
     } else if (section == QLatin1String("settings")) {
         index = 4;
-        title = QStringLiteral("Settings");
     }
 
     if (index < 0)
@@ -241,7 +217,6 @@ void MainWindow::showSection(const QString &section)
 
     m_mainStack->setCurrentIndex(index);
     m_sidebar->setActivePage(section);
-    m_headerTitle->setText(title);
     updateSidebarVisibility();
 }
 
@@ -283,7 +258,7 @@ void MainWindow::updateSidebarVisibility()
     }
 }
 
-void MainWindow::updateCurrentTabHeader()
+void MainWindow::updateCurrentTabNavigation()
 {
     if (m_mainStack->currentWidget() != m_tabs)
         return;
@@ -291,11 +266,9 @@ void MainWindow::updateCurrentTabHeader()
     const int index = m_tabs->currentIndex();
     if (index <= 0) {
         m_sidebar->setActivePage(QStringLiteral("home"));
-        m_headerTitle->setText(QStringLiteral("Home"));
     } else {
         // Documents are not navigation sections, so leave the sidebar neutral.
         m_sidebar->setActivePage(QString());
-        m_headerTitle->setText(m_tabs->tabText(index));
     }
     updateSidebarVisibility();
 }
@@ -444,7 +417,7 @@ void MainWindow::openFile(const QString &filePath)
                 absolutePath, filePathComparison()) == 0) {
             m_mainStack->setCurrentWidget(m_tabs);
             m_tabs->setCurrentIndex(i);
-            updateCurrentTabHeader();
+            updateCurrentTabNavigation();
             addToRecentFiles(absolutePath);
             return;
         }
@@ -455,7 +428,7 @@ void MainWindow::openFile(const QString &filePath)
     m_tabs->setTabToolTip(index, QDir::toNativeSeparators(absolutePath));
     m_mainStack->setCurrentWidget(m_tabs);
     m_tabs->setCurrentIndex(index);
-    updateCurrentTabHeader();
+    updateCurrentTabNavigation();
     addToRecentFiles(absolutePath);
     refreshTabVisibility();
 }
