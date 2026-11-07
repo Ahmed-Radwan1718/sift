@@ -474,10 +474,48 @@ struct PptxDocument::Impl
         p.restore();
     }
 
+    QDomElement inheritedTransform(const QDomElement &shape,
+                                   const QDomDocument *layout,
+                                   const QDomDocument *master) const
+    {
+        const QDomElement placeholder = descendant(child(shape, QStringLiteral("nvSpPr")),
+                                                    QStringLiteral("ph"));
+        if (placeholder.isNull())
+            return {};
+        const QString index = placeholder.attribute(QStringLiteral("idx"),
+                                                     QStringLiteral("0"));
+        const QString type = placeholder.attribute(QStringLiteral("type"));
+        for (const QDomDocument *source : {layout, master}) {
+            if (!source || source->isNull())
+                continue;
+            const QDomElement tree = descendant(source->documentElement(),
+                                                 QStringLiteral("spTree"));
+            for (QDomElement candidate = tree.firstChildElement();
+                 !candidate.isNull(); candidate = candidate.nextSiblingElement()) {
+                if (localName(candidate) != QLatin1String("sp"))
+                    continue;
+                const QDomElement ph = descendant(child(candidate, QStringLiteral("nvSpPr")),
+                                                  QStringLiteral("ph"));
+                if (ph.isNull())
+                    continue;
+                if (ph.attribute(QStringLiteral("idx"), QStringLiteral("0")) != index &&
+                    (type.isEmpty() || ph.attribute(QStringLiteral("type")) != type))
+                    continue;
+                const QDomElement xfrm = child(child(candidate, QStringLiteral("spPr")),
+                                                QStringLiteral("xfrm"));
+                if (!xfrm.isNull())
+                    return xfrm;
+            }
+        }
+        return {};
+    }
+
     void drawShapes(QPainter &p, const QDomElement &shapeTree,
                     const QHash<QString, QString> &rels,
                     qreal sx, qreal sy, int *unsupported,
-                    bool skipPlaceholders = false) const
+                    bool skipPlaceholders = false,
+                    const QDomDocument *layout = nullptr,
+                    const QDomDocument *master = nullptr) const
     {
         if (shapeTree.isNull())
             return;
@@ -502,7 +540,8 @@ struct PptxDocument::Impl
                     p.translate(-chOff.attribute(QStringLiteral("x")).toDouble() * sx,
                                 -chOff.attribute(QStringLiteral("y")).toDouble() * sy);
                 }
-                drawShapes(p, e, rels, sx, sy, unsupported, skipPlaceholders);
+                drawShapes(p, e, rels, sx, sy, unsupported, skipPlaceholders,
+                           layout, master);
                 p.restore();
                 continue;
             }
@@ -513,9 +552,12 @@ struct PptxDocument::Impl
                     continue;
 
                 const QDomElement spPr = child(e, QStringLiteral("spPr"));
-                const QDomElement xfrm = child(spPr, QStringLiteral("xfrm"));
+                QDomElement xfrm = child(spPr, QStringLiteral("xfrm"));
+                if (xfrm.isNull())
+                    xfrm = inheritedTransform(e, layout, master);
                 const QRectF rect = boxFromTransform(xfrm, sx, sy);
-                if (rect.width() <= 0 || rect.height() <= 0)
+                if (rect.width() < 0 || rect.height() < 0 ||
+                    (rect.width() == 0 && rect.height() == 0))
                     continue;
 
                 p.save();
@@ -767,13 +809,6 @@ QImage PptxDocument::renderSlide(int index, const QSize &pixelSize, QString *war
         pixelSize.isEmpty() || pixelSize.width() > 4096 || pixelSize.height() > 4096)
         return {};
 
-    QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::white);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::TextAntialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-
     const auto &slide = m_impl->slides.at(index);
     const qreal sx = pixelSize.width() / m_impl->emuSize.width();
     const qreal sy = pixelSize.height() / m_impl->emuSize.height();
@@ -781,7 +816,13 @@ QImage PptxDocument::renderSlide(int index, const QSize &pixelSize, QString *war
     QColor bg = m_impl->background(slide.xml);
     if (!bg.isValid()) bg = m_impl->background(slide.layout);
     if (!bg.isValid()) bg = m_impl->background(slide.master);
-    if (bg.isValid()) image.fill(bg);
+
+    QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(bg.isValid() ? bg : QColor(Qt::white));
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
     int unsupported = 0;
     if (!slide.master.isNull())
@@ -794,7 +835,8 @@ QImage PptxDocument::renderSlide(int index, const QSize &pixelSize, QString *war
                            slide.layoutRels, sx, sy, &unsupported, true);
     m_impl->drawShapes(painter, descendant(slide.xml.documentElement(),
                                            QStringLiteral("spTree")),
-                       slide.rels, sx, sy, &unsupported);
+                       slide.rels, sx, sy, &unsupported, false,
+                       &slide.layout, &slide.master);
     painter.end();
     if (warning && unsupported)
         *warning = QStringLiteral("%1 image or advanced element(s) could not be displayed on this slide.")
