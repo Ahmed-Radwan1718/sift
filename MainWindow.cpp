@@ -3,6 +3,7 @@
 #include "PdfViewerPage.h"
 #include "Sidebar.h"
 
+#include <QColor>
 #include <QDateTime>
 #include <QDir>
 #include <QDragEnterEvent>
@@ -13,22 +14,56 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
+#include <QShortcut>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
+#include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 
 namespace {
+QIcon documentSidebarIcon(bool hidden)
+{
+    // Small monochrome icon resembling a document-reader side panel.
+    QPixmap pixmap(40, 40);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor(QStringLiteral("#dedede")), 1.8,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+
+    painter.drawRoundedRect(QRectF(4.5, 7.0, 31.0, 26.0), 4.0, 4.0);
+    painter.drawLine(QPointF(15.5, 7.0), QPointF(15.5, 33.0));
+
+    if (!hidden) {
+        painter.fillRect(QRectF(6.5, 9.0, 7.3, 22.0),
+                         QColor(QStringLiteral("#777777")));
+        painter.drawLine(QPointF(25.5, 16.0), QPointF(22.0, 20.0));
+        painter.drawLine(QPointF(22.0, 20.0), QPointF(25.5, 24.0));
+    } else {
+        painter.drawLine(QPointF(22.0, 16.0), QPointF(25.5, 20.0));
+        painter.drawLine(QPointF(25.5, 20.0), QPointF(22.0, 24.0));
+    }
+    return QIcon(pixmap);
+}
+
 Qt::CaseSensitivity filePathComparison()
 {
 #ifdef Q_OS_WIN
@@ -62,6 +97,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
     setWindowTitle(QStringLiteral("Sift"));
     setAcceptDrops(true);
+    // This is the reading preference, independent of the sidebar's own
+    // expanded/collapsed navigation preference.
+    m_documentSidebarHidden = QSettings().value(
+        QStringLiteral("documentSidebarHidden"), false).toBool();
 
     auto *root = new QWidget(this);
     root->setObjectName(QStringLiteral("root"));
@@ -87,8 +126,16 @@ MainWindow::MainWindow(QWidget *parent)
     topBar->setObjectName(QStringLiteral("topBar"));
     topBar->setFixedHeight(64);
     auto *topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(27, 0, 27, 0);
+    topLayout->setContentsMargins(18, 0, 27, 0);
     topLayout->setSpacing(12);
+
+    m_sidebarVisibilityButton = new QToolButton(topBar);
+    m_sidebarVisibilityButton->setObjectName(QStringLiteral("documentSidebarToggle"));
+    m_sidebarVisibilityButton->setFixedSize(34, 34);
+    m_sidebarVisibilityButton->setIconSize(QSize(20, 20));
+    m_sidebarVisibilityButton->setCursor(Qt::PointingHandCursor);
+    m_sidebarVisibilityButton->setVisible(false);
+    topLayout->addWidget(m_sidebarVisibilityButton);
 
     m_headerTitle = new QLabel(QStringLiteral("Home"), topBar);
     m_headerTitle->setObjectName(QStringLiteral("headerTitle"));
@@ -128,6 +175,16 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_headerOpen, &QPushButton::clicked,
             this, &MainWindow::openFilesDialog);
 
+    connect(m_sidebarVisibilityButton, &QToolButton::clicked,
+            this, &MainWindow::toggleDocumentSidebar);
+
+    // Scope Ctrl+B to the window; it does nothing on Home or library pages.
+    auto *sidebarShortcut = new QShortcut(
+        QKeySequence(QStringLiteral("Ctrl+B")), this);
+    sidebarShortcut->setContext(Qt::WindowShortcut);
+    connect(sidebarShortcut, &QShortcut::activated,
+            this, &MainWindow::toggleDocumentSidebar);
+
     connect(m_tabs, &QTabWidget::currentChanged, this, [this](int) {
         updateCurrentTabHeader();
     });
@@ -144,6 +201,7 @@ MainWindow::MainWindow(QWidget *parent)
             m_tabs->setCurrentIndex(0);
 
         refreshTabVisibility();
+        updateCurrentTabHeader();
     });
 
     refreshDashboards();
@@ -184,6 +242,45 @@ void MainWindow::showSection(const QString &section)
     m_mainStack->setCurrentIndex(index);
     m_sidebar->setActivePage(section);
     m_headerTitle->setText(title);
+    updateSidebarVisibility();
+}
+
+void MainWindow::toggleDocumentSidebar()
+{
+    if (!isDocumentActive())
+        return;
+
+    m_documentSidebarHidden = !m_documentSidebarHidden;
+    QSettings().setValue(QStringLiteral("documentSidebarHidden"),
+                         m_documentSidebarHidden);
+    updateSidebarVisibility();
+}
+
+bool MainWindow::isDocumentActive() const
+{
+    return m_mainStack && m_tabs &&
+           m_mainStack->currentWidget() == m_tabs &&
+           m_tabs->currentIndex() > 0;
+}
+
+void MainWindow::updateSidebarVisibility()
+{
+    const bool documentActive = isDocumentActive();
+
+    // Library pages always expose navigation. Document tabs use the
+    // remembered reading preference and reclaim the sidebar's entire width.
+    m_sidebar->setVisible(!documentActive || !m_documentSidebarHidden);
+    m_sidebarVisibilityButton->setVisible(documentActive);
+
+    if (documentActive) {
+        m_sidebarVisibilityButton->setIcon(
+            documentSidebarIcon(m_documentSidebarHidden));
+        const QString hint = m_documentSidebarHidden
+            ? QStringLiteral("Show sidebar (Ctrl+B)")
+            : QStringLiteral("Hide sidebar (Ctrl+B)");
+        m_sidebarVisibilityButton->setToolTip(hint);
+        m_sidebarVisibilityButton->setAccessibleName(hint);
+    }
 }
 
 void MainWindow::updateCurrentTabHeader()
@@ -200,6 +297,7 @@ void MainWindow::updateCurrentTabHeader()
         m_sidebar->setActivePage(QString());
         m_headerTitle->setText(m_tabs->tabText(index));
     }
+    updateSidebarVisibility();
 }
 
 QWidget *MainWindow::createRecentPage()

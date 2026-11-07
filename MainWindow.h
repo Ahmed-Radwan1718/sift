@@ -14,6 +14,7 @@ class QPushButton;
 class QStackedWidget;
 class Sidebar;
 class QTabWidget;
+class QToolButton;
 class QVBoxLayout;
 class QWidget;
 
@@ -37,6 +38,9 @@ private:
     QWidget *createDocumentPage(const QString &filePath);
     void showSection(const QString &section);
     void updateCurrentTabHeader();
+    bool isDocumentActive() const;
+    void updateSidebarVisibility();
+    void toggleDocumentSidebar();
     void openFilesDialog();
     void openFile(const QString &filePath);
     void addToRecentFiles(const QString &filePath);
@@ -54,4 +58,6 @@ private:
     DocumentDashboard *m_favoritesDashboard = nullptr;
     QLabel *m_headerTitle = nullptr;
     QPushButton *m_headerOpen = nullptr;
+    QToolButton *m_sidebarVisibilityButton = nullptr;
+    bool m_documentSidebarHidden = false;
 };

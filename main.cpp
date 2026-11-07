@@ -82,6 +82,18 @@ int main(int argc, char *argv[])
             font-weight: 600;
             color: #e9e9e9;
         }
+        QToolButton#documentSidebarToggle {
+            background-color: transparent;
+            border: none;
+            border-radius: 7px;
+            padding: 0px;
+        }
+        QToolButton#documentSidebarToggle:hover {
+            background-color: #353535;
+        }
+        QToolButton#documentSidebarToggle:pressed {
+            background-color: #454545;
+        }
         QLabel#libraryTitle {
             color: #eeeeee;
             font-size: 27px;
