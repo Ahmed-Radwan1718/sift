@@ -8,14 +8,13 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMargins>
 #include <QPdfPageNavigator>
 #include <QPdfView>
 #include <QPointF>
 #include <QPushButton>
 #include <QScreen>
-#include <QSignalBlocker>
-#include <QSpinBox>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -80,13 +79,15 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     m_previous->setFixedSize(29, 29);
     m_next->setFixedSize(29, 29);
 
-    m_pageInput = new QSpinBox(m_floatingControls);
+    // Use a compact text field so the current page is always visible.
+    m_pageInput = new QLineEdit(QStringLiteral("1"), m_floatingControls);
     m_pageInput->setObjectName(QStringLiteral("floatingPdfPageInput"));
-    m_pageInput->setRange(1, 1);
-    m_pageInput->setButtonSymbols(QAbstractSpinBox::NoButtons);
     m_pageInput->setAlignment(Qt::AlignCenter);
     m_pageInput->setFixedSize(45, 29);
-    m_pageInput->setToolTip(QStringLiteral("Jump to page"));
+    m_pageInput->setMaxLength(7);
+    m_pageInput->setInputMethodHints(Qt::ImhDigitsOnly);
+    m_pageInput->setToolTip(QStringLiteral("Current page — type a number to jump"));
+    m_pageInput->setAccessibleName(QStringLiteral("Current PDF page"));
 
     m_pageTotal = new QLabel(QStringLiteral("/ 0"), m_floatingControls);
     m_pageTotal->setObjectName(QStringLiteral("floatingPdfText"));
@@ -183,9 +184,15 @@ PdfViewerPage::PdfViewerPage(const QString &filePath, QWidget *parent)
     connect(m_next, &QPushButton::clicked, this, [this, navigator]() {
         jumpToPage(navigator->currentPage() + 1);
     });
-    connect(m_pageInput, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, [this](int pageNumber) {
-        jumpToPage(pageNumber - 1);
+    connect(m_pageInput, &QLineEdit::editingFinished, this, [this]() {
+        const int pageCount = m_document->pageCount();
+        bool valid = false;
+        const int requested = m_pageInput->text().trimmed().toInt(&valid);
+        if (valid && pageCount > 0)
+            jumpToPage(std::clamp(requested, 1, pageCount) - 1);
+        // Revert invalid inputs; reflect the actual page after navigation.
+        m_pageInput->setModified(false);
+        updatePageControls();
     });
     connect(navigator, &QPdfPageNavigator::currentPageChanged,
             this, [this](int) { updatePageControls(); });
@@ -286,10 +293,13 @@ void PdfViewerPage::updatePageControls()
 {
     const int pageCount = m_document->pageCount();
     const int currentPage = m_view->pageNavigator()->currentPage();
-    {
-        const QSignalBlocker blocker(m_pageInput);
-        m_pageInput->setRange(1, std::max(1, pageCount));
-        m_pageInput->setValue(std::clamp(currentPage + 1, 1, std::max(1, pageCount)));
+    // Follow the navigator as the user scrolls, without clobbering text
+    // they are currently entering into the page-jump field.
+    if (!m_pageInput->hasFocus() || !m_pageInput->isModified()) {
+        const int displayPage = pageCount > 0
+            ? std::clamp(currentPage + 1, 1, pageCount) : 0;
+        m_pageInput->setText(QString::number(displayPage));
+        m_pageInput->setModified(false);
     }
     m_pageTotal->setText(QStringLiteral("/ %1").arg(pageCount));
 

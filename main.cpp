@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
             color: #d9d9d9;
             font-size: 12px;
         }
-        QSpinBox#floatingPdfPageInput {
+        QLineEdit#floatingPdfPageInput {
             background-color: #414141;
             color: #f0f0f0;
             border: 1px solid #555555;
@@ -351,7 +351,7 @@ int main(int argc, char *argv[])
             padding: 0 3px;
             font-size: 12px;
         }
-        QSpinBox#floatingPdfPageInput:focus {
+        QLineEdit#floatingPdfPageInput:focus {
             border: 1px solid #929292;
         }
         QLabel#pdfMessage {

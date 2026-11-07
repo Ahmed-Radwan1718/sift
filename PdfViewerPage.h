@@ -6,9 +6,9 @@
 class QEvent;
 class QFrame;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QPdfView;
-class QSpinBox;
 class QStackedWidget;
 class QTimer;
 
@@ -40,7 +40,7 @@ private:
     QTimer *m_controlsHideTimer = nullptr;
     QWidget *m_messagePage = nullptr;
     QLabel *m_message = nullptr;
-    QSpinBox *m_pageInput = nullptr;
+    QLineEdit *m_pageInput = nullptr;
     QLabel *m_pageTotal = nullptr;
     QLabel *m_zoomLabel = nullptr;
     QPushButton *m_previous = nullptr;
