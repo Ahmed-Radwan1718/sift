@@ -19,8 +19,25 @@
 namespace {
 QIcon navigationIcon(const QString &name, bool active)
 {
-    if (name == QLatin1String("settings"))
-        return QIcon(QStringLiteral(":/settings.png"));
+    if (name == QLatin1String("settings")) {
+        // Tint the original PNG using its alpha channel, keeping its shape.
+        // Match the other sidebar icons: gray normally, near-white when active.
+        QPixmap source(QStringLiteral(":/settings.png"));
+        if (source.isNull())
+            return QIcon();
+
+        QPixmap tinted(44, 44);
+        tinted.fill(Qt::transparent);
+        QPainter iconPainter(&tinted);
+        iconPainter.setRenderHint(QPainter::SmoothPixmapTransform);
+        iconPainter.drawPixmap(tinted.rect(), source);
+        iconPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        iconPainter.fillRect(tinted.rect(),
+            active ? QColor(QStringLiteral("#f0f0f0"))
+                   : QColor(QStringLiteral("#a4a4a4")));
+        iconPainter.end();
+        return QIcon(tinted);
+    }
 
     QPixmap pixmap(44, 44);
     pixmap.fill(Qt::transparent);
