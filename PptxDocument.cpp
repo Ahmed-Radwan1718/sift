@@ -595,6 +595,17 @@ struct PptxDocument::Impl
         for (QDomElement e = shapeTree.firstChildElement(); !e.isNull();
              e = e.nextSiblingElement()) {
             const QString kind = localName(e);
+            if (kind == QLatin1String("AlternateContent")) {
+                // PowerPoint can wrap older-compatible pictures and shapes in
+                // Markup Compatibility AlternateContent. The fallback usually
+                // contains the static picture needed for an offline preview.
+                QDomElement chosen = child(e, QStringLiteral("Fallback"));
+                if (chosen.isNull())
+                    chosen = child(e, QStringLiteral("Choice"));
+                drawShapes(p, chosen, rels, sx, sy, unsupported, skipPlaceholders,
+                           layout, master);
+                continue;
+            }
             if (kind == QLatin1String("grpSp")) {
                 const QDomElement xfrm = child(child(e, QStringLiteral("grpSpPr")),
                                                 QStringLiteral("xfrm"));
@@ -629,9 +640,11 @@ struct PptxDocument::Impl
                 if (xfrm.isNull())
                     xfrm = inheritedTransform(e, layout, master);
                 const QRectF rect = boxFromTransform(xfrm, sx, sy);
-                if (rect.width() < 0 || rect.height() < 0 ||
-                    (rect.width() == 0 && rect.height() == 0))
+                if (rect.width() <= 0 || rect.height() <= 0) {
+                    if (!textOf(child(e, QStringLiteral("txBody"))).isEmpty())
+                        ++*unsupported; // Do not silently hide unresolved text.
                     continue;
+                }
 
                 p.save();
                 const qreal angle = xfrm.attribute(QStringLiteral("rot")).toDouble() / 60000.0;
@@ -918,7 +931,7 @@ QImage PptxDocument::renderSlide(int index, const QSize &pixelSize, QString *war
                        &slide.layout, &slide.master);
     painter.end();
     if (warning && unsupported)
-        *warning = QStringLiteral("%1 image or advanced element(s) could not be displayed on this slide.")
+        *warning = QStringLiteral("%1 text, image, or advanced PowerPoint element(s) could not be rendered accurately on this slide.")
                        .arg(unsupported);
     return image;
 }
