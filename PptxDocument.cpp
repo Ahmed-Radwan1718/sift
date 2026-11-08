@@ -162,10 +162,16 @@ QColor solidFill(const QDomElement &element,
     return fill.isNull() ? fallback : colorValue(fill, theme, fallback);
 }
 
-QRectF boxFromTransform(const QDomElement &xfrm, qreal sx, qreal sy)
+QRectF boxFromTransform(const QDomElement &xfrm, qreal sx, qreal sy,
+                        const QDomElement &fallback = QDomElement())
 {
-    const QDomElement off = child(xfrm, QStringLiteral("off"));
-    const QDomElement ext = child(xfrm, QStringLiteral("ext"));
+    QDomElement off = child(xfrm, QStringLiteral("off"));
+    QDomElement ext = child(xfrm, QStringLiteral("ext"));
+    // The slide can override only one component of its master layout.
+    if (off.isNull())
+        off = child(fallback, QStringLiteral("off"));
+    if (ext.isNull())
+        ext = child(fallback, QStringLiteral("ext"));
     if (off.isNull() || ext.isNull())
         return {};
     return QRectF(off.attribute(QStringLiteral("x")).toDouble() * sx,
@@ -638,9 +644,10 @@ struct PptxDocument::Impl
 
                 const QDomElement spPr = child(e, QStringLiteral("spPr"));
                 QDomElement xfrm = child(spPr, QStringLiteral("xfrm"));
+                const QDomElement inherited = inheritedTransform(e, layout, master);
+                const QRectF rect = boxFromTransform(xfrm, sx, sy, inherited);
                 if (xfrm.isNull())
-                    xfrm = inheritedTransform(e, layout, master);
-                const QRectF rect = boxFromTransform(xfrm, sx, sy);
+                    xfrm = inherited;
                 if (rect.width() <= 0 || rect.height() <= 0) {
                     if (!textOf(child(e, QStringLiteral("txBody"))).isEmpty())
                         ++*unsupported; // Do not silently hide unresolved text.
