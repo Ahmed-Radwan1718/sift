@@ -32,6 +32,22 @@ int main(int argc, char **argv)
         first.pixelColor(300, 200) != QColor(QStringLiteral("#ff0000")))
         return 6;
 
+    // Pixel-verify real glyphs, not just the presence of text in the XML.
+    // This would have caught the missing title and body text in lecture decks.
+    int darkGlyphPixels = 0;
+    for (int y = 2; y < 85; ++y) {
+        for (int x = 65; x < 800; ++x) {
+            const QColor c = first.pixelColor(x, y);
+            if (c.red() < 120 && c.green() < 120 && c.blue() < 120)
+                ++darkGlyphPixels;
+        }
+    }
+    if (darkGlyphPixels < 40) {
+        std::fprintf(stderr, "Text title is missing: found only %d dark pixels\\n",
+                     darkGlyphPixels);
+        return 10;
+    }
+
     const QImage second = document.renderSlide(1, QSize(1000, 562), &warning);
     if (second.isNull() || !warning.isEmpty() ||
         second.pixelColor(300, 200) != QColor(QStringLiteral("#0000ff")))
