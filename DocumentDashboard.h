@@ -5,7 +5,6 @@
 #include <QString>
 #include <functional>
 
-class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -42,7 +41,6 @@ private:
     QString m_filter = QStringLiteral("All files");
 
     QLineEdit *m_search = nullptr;
-    QComboBox *m_sort = nullptr;
     QTreeWidget *m_table = nullptr;
     QLabel *m_count = nullptr;
     QLabel *m_emptyMessage = nullptr;
