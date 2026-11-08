@@ -20,7 +20,7 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "Failed to open example deck: %s\n", qPrintable(error));
         return 3;
     }
-    if (document.slideCount() != 2)
+    if (document.slideCount() != 3)
         return 4;
     if (document.slideTitle(0) != QStringLiteral("First slide") ||
         document.slideTitle(1) != QStringLiteral("Second slide"))
@@ -52,6 +52,28 @@ int main(int argc, char **argv)
     if (second.isNull() || !warning.isEmpty() ||
         second.pixelColor(300, 200) != QColor(QStringLiteral("#0000ff")))
         return 7;
+
+    // Verify that text-only shapes which inherit all their geometry from
+    // master/layout XML are still rendered where PowerPoint places them.
+    const QImage inherited = document.renderSlide(2, QSize(1000, 562), &warning);
+    if (inherited.isNull() || !warning.isEmpty())
+        return 11;
+    int orange = 0, blue = 0;
+    for (int y = 0; y < inherited.height(); ++y) {
+        for (int x = 0; x < inherited.width(); ++x) {
+            const QColor c = inherited.pixelColor(x, y);
+            if (y < 160 && c.red() > 120 && c.red() > c.green() * 1.7 &&
+                c.green() > c.blue() * 1.2)
+                ++orange;
+            if (y > 125 && c.blue() > 135 && c.blue() > c.red() * 1.6)
+                ++blue;
+        }
+    }
+    if (orange < 30 || blue < 30) {
+        std::fprintf(stderr, "Missing inherited text: orange=%d blue=%d\\n",
+                     orange, blue);
+        return 12;
+    }
 
     QTemporaryFile invalid;
     if (!invalid.open())
