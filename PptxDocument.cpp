@@ -471,18 +471,19 @@ struct PptxDocument::Impl
                     const int pointHundredths = rawSize.toInt();
                     const qreal px = std::clamp(pointHundredths / 100.0
                         * fontPxPerPoint * fitRatio * shrink, 6.0, 250.0);
-                    fmt.setFontPixelSize(px);
                     const QDomElement latin = child(runPr, QStringLiteral("latin"));
                     const QDomElement fallbackLatin = child(defaultRun, QStringLiteral("latin"));
                     const QString face = latin.attribute(QStringLiteral("typeface"),
                         fallbackLatin.attribute(QStringLiteral("typeface"), QStringLiteral("Arial")));
-                    fmt.setFontFamilies(QStringList{face});
                     const QString bold = runPr.attribute(
                         QStringLiteral("b"), defaultRun.attribute(QStringLiteral("b")));
                     const QString italic = runPr.attribute(
                         QStringLiteral("i"), defaultRun.attribute(QStringLiteral("i")));
-                    fmt.setFontWeight(bold == QLatin1String("1") ? QFont::Bold : QFont::Normal);
-                    fmt.setFontItalic(italic == QLatin1String("1"));
+                    QFont font(face);
+                    font.setPixelSize(std::max(1, qRound(px)));
+                    font.setBold(bold == QLatin1String("1"));
+                    font.setItalic(italic == QLatin1String("1"));
+                    fmt.setFont(font);
                     QColor ink = solidFill(runPr, theme);
                     if (!ink.isValid())
                         ink = solidFill(defaultRun, theme, defaultColor);
