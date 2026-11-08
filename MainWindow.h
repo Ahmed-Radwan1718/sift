@@ -4,10 +4,8 @@
 #include <QStringList>
 
 class DocumentDashboard;
-class QDragEnterEvent;
-class QDragLeaveEvent;
-class QDragMoveEvent;
-class QDropEvent;
+class QEvent;
+class QMimeData;
 class QFrame;
 class QLabel;
 class QStackedWidget;
@@ -23,10 +21,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 protected:
-    void dragEnterEvent(QDragEnterEvent *event) override;
-    void dragMoveEvent(QDragMoveEvent *event) override;
-    void dragLeaveEvent(QDragLeaveEvent *event) override;
-    void dropEvent(QDropEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     QWidget *createHomePage();
@@ -47,10 +42,12 @@ private:
     void refreshDashboards();
     void refreshTabVisibility();
     bool isSupported(const QString &filePath) const;
+    QStringList droppedFiles(const QMimeData *mimeData) const;
     QStringList recentFiles() const;
 
     Sidebar *m_sidebar = nullptr;
     QStackedWidget *m_mainStack = nullptr;
+    QFrame *m_dropOverlay = nullptr;
     QTabWidget *m_tabs = nullptr;
     DocumentDashboard *m_homeDashboard = nullptr;
     DocumentDashboard *m_recentDashboard = nullptr;
