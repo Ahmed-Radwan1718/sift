@@ -126,23 +126,6 @@ int main(int argc, char *argv[])
             color: #ffffff;
             border: 1px solid #5a5a5a;
         }
-        QComboBox#dashboardSort {
-            background-color: #2d2d2d;
-            color: #d7d7d7;
-            border: 1px solid #434343;
-            border-radius: 6px;
-            padding: 7px 10px;
-            font-size: 12px;
-        }
-        QComboBox#dashboardSort:hover {
-            border-color: #666666;
-        }
-        QComboBox#dashboardSort QAbstractItemView {
-            background-color: #2b2b2b;
-            color: #eeeeee;
-            border: 1px solid #444444;
-            selection-background-color: #454545;
-        }
         QStackedWidget#dashboardResults, QWidget#emptyLibrary {
             background-color: #232323;
         }
