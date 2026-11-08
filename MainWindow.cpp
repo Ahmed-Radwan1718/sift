@@ -3,13 +3,12 @@
 #include "PdfViewerPage.h"
 #include "Sidebar.h"
 
+#include <QApplication>
 #include <QColor>
 #include <QDateTime>
 #include <QDir>
-#include <QDragEnterEvent>
-#include <QDragLeaveEvent>
-#include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -142,6 +141,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_tabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
 
     m_mainStack = new QStackedWidget(mainArea);
+    m_mainStack->setAcceptDrops(true);
     m_mainStack->addWidget(m_tabs); // Index 0: home + open documents
     m_mainStack->addWidget(createRecentPage()); // Index 1
     m_mainStack->addWidget(createFavoritesPage()); // Index 2
@@ -155,6 +155,39 @@ MainWindow::MainWindow(QWidget *parent)
                        "The sidebar collapse preference is already saved."))); // Index 4
     contentLayout->addWidget(m_mainStack, 1);
     setCentralWidget(root);
+
+    // A transient overlay over the entire document area; never a permanent
+    // "Add file" button. It also stays transparent to drag/drop hit testing.
+    m_dropOverlay = new QFrame(m_mainStack);
+    m_dropOverlay->setObjectName(QStringLiteral("fileDropOverlay"));
+    m_dropOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_dropOverlay->setStyleSheet(QStringLiteral(
+        "QFrame#fileDropOverlay { background-color: rgba(29, 31, 34, 235);"
+        "border: 2px dashed #84929f; border-radius: 14px; }"
+        "QLabel#fileDropTitle { background: transparent; color: #f3f3f3;"
+        "font-size: 24px; font-weight: 600; border: none; }"
+        "QLabel#fileDropHint { background: transparent; color: #b1b5bb;"
+        "font-size: 13px; border: none; }"));
+    auto *dropLayout = new QVBoxLayout(m_dropOverlay);
+    dropLayout->setAlignment(Qt::AlignCenter);
+    dropLayout->setSpacing(10);
+    auto *dropTitle = new QLabel(QStringLiteral("Drop to open"), m_dropOverlay);
+    dropTitle->setObjectName(QStringLiteral("fileDropTitle"));
+    dropTitle->setAlignment(Qt::AlignCenter);
+    dropLayout->addWidget(dropTitle);
+    auto *dropHint = new QLabel(
+        QStringLiteral("Open documents directly from File Explorer"), m_dropOverlay);
+    dropHint->setObjectName(QStringLiteral("fileDropHint"));
+    dropHint->setAlignment(Qt::AlignCenter);
+    dropLayout->addWidget(dropHint);
+    m_dropOverlay->setGeometry(m_mainStack->rect());
+    m_dropOverlay->hide();
+
+    // Still allow opening a document without drag-and-drop (Ctrl+O).
+    auto *openShortcut = new QShortcut(QKeySequence::Open, this);
+    openShortcut->setContext(Qt::WindowShortcut);
+    connect(openShortcut, &QShortcut::activated,
+            this, &MainWindow::openFilesDialog);
 
     connect(m_sidebarVisibilityButton, &QToolButton::clicked,
             this, &MainWindow::toggleDocumentSidebar);
@@ -188,6 +221,9 @@ MainWindow::MainWindow(QWidget *parent)
     refreshDashboards();
     refreshTabVisibility();
     updateCurrentTabNavigation();
+
+    // Catch drops even when the pointer is over a table's viewport or a tab.
+    qApp->installEventFilter(this);
 }
 
 void MainWindow::showSection(const QString &section)
@@ -278,8 +314,7 @@ QWidget *MainWindow::createRecentPage()
     m_recentDashboard = new DocumentDashboard(
         DocumentDashboard::Mode::Recent,
         [this](const QString &path) { openFile(path); },
-        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
-        [this]() { openFilesDialog(); });
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); });
     return m_recentDashboard;
 }
 
@@ -288,8 +323,7 @@ QWidget *MainWindow::createFavoritesPage()
     m_favoritesDashboard = new DocumentDashboard(
         DocumentDashboard::Mode::Favorites,
         [this](const QString &path) { openFile(path); },
-        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
-        [this]() { openFilesDialog(); });
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); });
     return m_favoritesDashboard;
 }
 
@@ -321,8 +355,7 @@ QWidget *MainWindow::createHomePage()
     m_homeDashboard = new DocumentDashboard(
         DocumentDashboard::Mode::Home,
         [this](const QString &path) { openFile(path); },
-        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); },
-        [this]() { openFilesDialog(); });
+        [this](const QString &path, bool isFavorite) { setFavorite(path, isFavorite); });
     return m_homeDashboard;
 }
 
@@ -491,47 +524,78 @@ void MainWindow::refreshTabVisibility()
     m_tabs->tabBar()->setVisible(m_tabs->count() > 1);
 }
 
-void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+QStringList MainWindow::droppedFiles(const QMimeData *mimeData) const
 {
-    if (event->mimeData()->hasUrls()) {
-        for (const QUrl &url : event->mimeData()->urls()) {
-            if (url.isLocalFile() && isSupported(url.toLocalFile())) {
-                event->acceptProposedAction();
-                return;
-            }
-        }
-    }
-    event->ignore();
-}
+    QStringList result;
+    if (!mimeData || !mimeData->hasUrls())
+        return result;
 
-void MainWindow::dragMoveEvent(QDragMoveEvent *event)
-{
-    event->acceptProposedAction();
-}
-
-void MainWindow::dragLeaveEvent(QDragLeaveEvent *event)
-{
-    event->accept();
-}
-
-void MainWindow::dropEvent(QDropEvent *event)
-{
-    bool openedAny = false;
-    for (const QUrl &url : event->mimeData()->urls()) {
+    for (const QUrl &url : mimeData->urls()) {
         if (!url.isLocalFile())
             continue;
-
-        const QString path = url.toLocalFile();
-        if (!isSupported(path))
+        const QFileInfo file(url.toLocalFile());
+        if (!file.isFile() || !isSupported(file.fileName()))
             continue;
+        const QString path = QDir::cleanPath(file.absoluteFilePath());
+        if (!result.contains(path, filePathComparison()))
+            result.append(path);
+    }
+    return result;
+}
 
-        openFile(path);
-        openedAny = true;
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_mainStack &&
+        (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
+        m_dropOverlay->setGeometry(m_mainStack->rect());
+        if (m_dropOverlay->isVisible())
+            m_dropOverlay->raise();
+    }
+    if (watched == this &&
+        (event->type() == QEvent::WindowDeactivate || event->type() == QEvent::Hide)) {
+        m_dropOverlay->hide();
     }
 
-    if (openedAny) {
-        event->acceptProposedAction();
+    auto *widget = qobject_cast<QWidget *>(watched);
+    if (!widget || widget->window() != this)
+        return QMainWindow::eventFilter(watched, event);
+
+    if (event->type() == QEvent::DragLeave) {
+        m_dropOverlay->hide();
+        return false;
+    }
+
+    if (event->type() != QEvent::DragEnter &&
+        event->type() != QEvent::DragMove &&
+        event->type() != QEvent::Drop)
+        return QMainWindow::eventFilter(watched, event);
+
+    auto *drop = static_cast<QDropEvent *>(event);
+    const QPoint local = m_mainStack->mapFromGlobal(
+        widget->mapToGlobal(drop->position().toPoint()));
+    const bool inside = m_mainStack->isVisible() &&
+                        m_mainStack->rect().contains(local);
+    const QStringList files = droppedFiles(drop->mimeData());
+
+    // Never move or modify the source documents. Reject unsupported files
+    // and drops outside the central document area.
+    if (!inside || files.isEmpty() ||
+        !drop->possibleActions().testFlag(Qt::CopyAction)) {
+        m_dropOverlay->hide();
+        return false;
+    }
+
+    drop->setDropAction(Qt::CopyAction);
+    drop->accept();
+
+    if (event->type() == QEvent::Drop) {
+        m_dropOverlay->hide();
+        for (const QString &path : files)
+            openFile(path);
     } else {
-        event->ignore();
+        m_dropOverlay->setGeometry(m_mainStack->rect());
+        m_dropOverlay->raise();
+        m_dropOverlay->show();
     }
+    return true;
 }
