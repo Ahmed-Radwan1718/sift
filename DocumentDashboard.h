@@ -19,12 +19,10 @@ public:
     enum class Mode { Home, Recent, Favorites };
     using OpenCallback = std::function<void(const QString &)>;
     using FavoriteCallback = std::function<void(const QString &, bool)>;
-    using OpenDialogCallback = std::function<void()>;
 
     explicit DocumentDashboard(Mode mode,
                                OpenCallback openFile,
                                FavoriteCallback setFavorite,
-                               OpenDialogCallback openDialog,
                                QWidget *parent = nullptr);
 
     void refresh();
@@ -37,7 +35,6 @@ private:
     Mode m_mode;
     OpenCallback m_openFile;
     FavoriteCallback m_setFavorite;
-    OpenDialogCallback m_openDialog;
     QString m_filter = QStringLiteral("All files");
 
     QLineEdit *m_search = nullptr;
