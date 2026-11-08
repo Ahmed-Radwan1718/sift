@@ -2,7 +2,7 @@ name: Windows build and PPTX smoke test
 
 on:
   push:
-    branches: [feature/offline-pptx-viewer]
+    branches: [main, feature/offline-pptx-viewer]
   pull_request:
     branches: [main]
   workflow_dispatch:
