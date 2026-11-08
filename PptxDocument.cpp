@@ -15,6 +15,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QTextDocument>
+#include <QTextBlockFormat>
+#include <QTextCharFormat>
+#include <QTextCursor>
 
 #include <algorithm>
 #include <cmath>
@@ -405,80 +408,129 @@ struct PptxDocument::Impl
                                              QStringLiteral("100000")).toDouble() / 100000.0,
                                 0.4, 1.0);
 
-        auto buildHtml = [&](qreal shrink) {
-            QString html = QStringLiteral("<html><body style='margin:0;padding:0;'>");
-            for (QDomElement paragraph = txBody.firstChildElement(); !paragraph.isNull();
-                 paragraph = paragraph.nextSiblingElement()) {
+        // Create real Qt text runs, instead of HTML with inline CSS. Imported
+        // PowerPoint decks frequently mix inherited run properties, paragraph
+        // defaults and explicitly colored text. The QTextCursor path preserves
+        // glyphs, per-run formatting and line breaks without HTML parsing.
+        QTextDocument document;
+        document.setDocumentMargin(0);
+        document.setDefaultFont(QFont(QStringLiteral("Arial")));
+
+        auto populate = [&](qreal shrink) {
+            document.clear();
+            QTextCursor cursor(&document);
+            const QDomElement listStyle = child(txBody, QStringLiteral("lstStyle"));
+            bool firstParagraph = true;
+            for (QDomElement paragraph = txBody.firstChildElement();
+                 !paragraph.isNull(); paragraph = paragraph.nextSiblingElement()) {
                 if (localName(paragraph) != QLatin1String("p"))
                     continue;
                 const QDomElement pPr = child(paragraph, QStringLiteral("pPr"));
-                const QString algn = pPr.attribute(QStringLiteral("algn"));
-                const QString align = algn == QLatin1String("ctr") ? QStringLiteral("center")
-                    : algn == QLatin1String("r") ? QStringLiteral("right")
-                    : algn == QLatin1String("just") ? QStringLiteral("justify")
-                                                    : QStringLiteral("left");
-                html += QStringLiteral("<p style='margin:0; padding:0; text-align:%1;'>").arg(align);
-                const QDomElement bullet = child(pPr, QStringLiteral("buChar"));
-                if (!bullet.isNull())
-                    html += bullet.attribute(QStringLiteral("char")).toHtmlEscaped() + QLatin1Char(' ');
+                const int level = std::clamp(
+                    pPr.attribute(QStringLiteral("lvl"), QStringLiteral("0")).toInt(), 0, 8);
+                const QDomElement listPPr = child(listStyle,
+                    QStringLiteral("lvl%1pPr").arg(level + 1));
+                const QDomElement defRPr = child(pPr, QStringLiteral("defRPr"));
+                const QDomElement listRPr = child(listPPr, QStringLiteral("defRPr"));
+                const QDomElement defaultRun = defRPr.isNull() ? listRPr : defRPr;
 
-                const QDomElement defaultRun = child(pPr, QStringLiteral("defRPr"));
-                bool any = false;
-                for (QDomElement run = paragraph.firstChildElement(); !run.isNull();
-                     run = run.nextSiblingElement()) {
+                const QString alignValue = pPr.attribute(
+                    QStringLiteral("algn"), listPPr.attribute(QStringLiteral("algn")));
+                QTextBlockFormat block;
+                if (alignValue == QLatin1String("ctr"))
+                    block.setAlignment(Qt::AlignHCenter);
+                else if (alignValue == QLatin1String("r"))
+                    block.setAlignment(Qt::AlignRight);
+                else if (alignValue == QLatin1String("just"))
+                    block.setAlignment(Qt::AlignJustify);
+                else
+                    block.setAlignment(Qt::AlignLeft);
+                block.setTopMargin(0);
+                block.setBottomMargin(0);
+                block.setLeftMargin(0);
+                block.setRightMargin(0);
+                const QDomElement lnSpc = child(pPr, QStringLiteral("lnSpc"));
+                const QDomElement pct = child(lnSpc, QStringLiteral("spcPct"));
+                if (!pct.isNull()) {
+                    const qreal percent = pct.attribute(QStringLiteral("val")).toDouble() / 1000.0;
+                    if (percent > 20 && percent < 300)
+                        block.setLineHeight(percent, QTextBlockFormat::ProportionalHeight);
+                }
+                if (firstParagraph) {
+                    cursor.setBlockFormat(block);
+                    firstParagraph = false;
+                } else {
+                    cursor.insertBlock(block);
+                }
+
+                auto formatFor = [&](const QDomElement &runPr) {
+                    QTextCharFormat fmt;
+                    const QString rawSize = runPr.attribute(
+                        QStringLiteral("sz"), defaultRun.attribute(
+                            QStringLiteral("sz"), QString::number(defaultSize)));
+                    const int pointHundredths = rawSize.toInt();
+                    const qreal px = std::clamp(pointHundredths / 100.0
+                        * fontPxPerPoint * fitRatio * shrink, 6.0, 250.0);
+                    fmt.setFontPixelSize(px);
+                    const QDomElement latin = child(runPr, QStringLiteral("latin"));
+                    const QDomElement fallbackLatin = child(defaultRun, QStringLiteral("latin"));
+                    const QString face = latin.attribute(QStringLiteral("typeface"),
+                        fallbackLatin.attribute(QStringLiteral("typeface"), QStringLiteral("Arial")));
+                    fmt.setFontFamilies(QStringList{face});
+                    const QString bold = runPr.attribute(
+                        QStringLiteral("b"), defaultRun.attribute(QStringLiteral("b")));
+                    const QString italic = runPr.attribute(
+                        QStringLiteral("i"), defaultRun.attribute(QStringLiteral("i")));
+                    fmt.setFontWeight(bold == QLatin1String("1") ? QFont::Bold : QFont::Normal);
+                    fmt.setFontItalic(italic == QLatin1String("1"));
+                    QColor ink = solidFill(runPr, theme);
+                    if (!ink.isValid())
+                        ink = solidFill(defaultRun, theme, defaultColor);
+                    fmt.setForeground(ink.isValid() ? ink : QColor(Qt::black));
+                    return fmt;
+                };
+
+                const QDomElement bullet = child(pPr, QStringLiteral("buChar"));
+                const QDomElement fallbackBullet = child(listPPr, QStringLiteral("buChar"));
+                const QDomElement chosenBullet = bullet.isNull() ? fallbackBullet : bullet;
+                if (!chosenBullet.isNull() &&
+                    child(pPr, QStringLiteral("buNone")).isNull()) {
+                    cursor.insertText(chosenBullet.attribute(QStringLiteral("char"))
+                          + QLatin1Char(' '), formatFor(defaultRun));
+                }
+
+                bool hasText = false;
+                for (QDomElement run = paragraph.firstChildElement();
+                     !run.isNull(); run = run.nextSiblingElement()) {
                     const QString kind = localName(run);
                     if (kind == QLatin1String("br")) {
-                        html += QStringLiteral("<br/>");
-                        any = true;
+                        cursor.insertText(QString(QChar::LineSeparator),
+                                          formatFor(defaultRun));
+                        hasText = true;
                         continue;
                     }
                     if (kind != QLatin1String("r") && kind != QLatin1String("fld"))
                         continue;
-                    const QDomElement prop = child(run, QStringLiteral("rPr"));
-                    const QDomElement style = prop.isNull() ? defaultRun : prop;
-                    const int size = style.attribute(QStringLiteral("sz"),
-                                    defaultRun.attribute(QStringLiteral("sz"),
-                                                        QString::number(defaultSize))).toInt();
-                    const qreal fontPx = std::clamp(size / 100.0 * fontPxPerPoint
-                                                    * fitRatio * shrink, 7.0, 250.0);
-                    const QColor color = solidFill(style, theme, defaultColor);
-                    const QDomElement latin = child(style, QStringLiteral("latin"));
-                    const QString face = latin.attribute(QStringLiteral("typeface"),
-                                                          QStringLiteral("Arial"));
-                    const QString weight = style.attribute(QStringLiteral("b")) == QLatin1String("1")
-                        ? QStringLiteral("bold") : QStringLiteral("normal");
-                    const QString italic = style.attribute(QStringLiteral("i")) == QLatin1String("1")
-                        ? QStringLiteral("italic") : QStringLiteral("normal");
-                    const QString css = QStringLiteral(
-                        "font-family:&quot;%1&quot;;font-size:%2px;color:%3;font-weight:%4;font-style:%5;")
-                        .arg(face.toHtmlEscaped(),
-                             QString::number(fontPx, 'f', 2),
-                             color.isValid() ? color.name(QColor::HexRgb)
-                                             : QStringLiteral("#252525"),
-                             weight, italic);
+                    const QDomElement runPr = child(run, QStringLiteral("rPr"));
                     const QString text = child(run, QStringLiteral("t")).text();
-                    html += QStringLiteral("<span style='%1'>%2</span>")
-                                .arg(css, text.toHtmlEscaped()
-                                       .replace(QLatin1Char(' '), QStringLiteral("&nbsp;")));
-                    any = true;
+                    if (text.isEmpty())
+                        continue;
+                    cursor.insertText(text, formatFor(runPr.isNull() ? defaultRun : runPr));
+                    hasText = true;
                 }
-                if (!any)
-                    html += QStringLiteral("&nbsp;");
-                html += QStringLiteral("</p>");
+                if (!hasText)
+                    cursor.insertText(QStringLiteral(" "), formatFor(defaultRun));
             }
-            return html + QStringLiteral("</body></html>");
+            document.setTextWidth(inner.width());
         };
 
-        QTextDocument document;
-        document.setDocumentMargin(0);
-        document.setDefaultFont(QFont(QStringLiteral("Arial")));
         qreal shrink = 1.0;
         for (int i = 0; i < 5; ++i) {
-            document.setHtml(buildHtml(shrink));
-            document.setTextWidth(inner.width());
+            populate(shrink);
             if (document.size().height() <= inner.height() || shrink <= 0.48)
                 break;
-            shrink *= std::clamp(inner.height() / document.size().height(), 0.55, 0.94);
+            const qreal measuredHeight = std::max(document.size().height(), 1.0);
+            shrink *= std::clamp(inner.height() / measuredHeight, 0.55, 0.94);
         }
 
         qreal y = inner.top();
