@@ -1,7 +1,6 @@
 #include "DocumentDashboard.h"
 
 #include <QAbstractItemView>
-#include <QComboBox>
 #include <QDate>
 #include <QDateTime>
 #include <QDir>
@@ -192,15 +191,6 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     sectionRow->addWidget(m_count);
     sectionRow->addStretch(1);
 
-    m_sort = new QComboBox(this);
-    m_sort->setObjectName(QStringLiteral("dashboardSort"));
-    m_sort->addItem(QStringLiteral("Last opened"), QStringLiteral("recent"));
-    m_sort->addItem(QStringLiteral("Name A–Z"), QStringLiteral("nameAsc"));
-    m_sort->addItem(QStringLiteral("Name Z–A"), QStringLiteral("nameDesc"));
-    m_sort->addItem(QStringLiteral("File type"), QStringLiteral("type"));
-    m_sort->setToolTip(QStringLiteral("Sort documents"));
-    m_sort->setMinimumWidth(146);
-    sectionRow->addWidget(m_sort);
     layout->addLayout(sectionRow);
     layout->addSpacing(13);
 
@@ -276,8 +266,6 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     });
     connect(m_search, &QLineEdit::textChanged, this,
             [this](const QString &) { refresh(); });
-    connect(m_sort, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int) { refresh(); });
 
     auto *findShortcut = new QShortcut(QKeySequence::Find, this);
     findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
@@ -363,19 +351,9 @@ void DocumentDashboard::refresh()
         ++order;
     }
 
-    const QString sort = m_sort->currentData().toString();
+    // Preserve the default most-recently-opened order without a sort control.
     std::stable_sort(entries.begin(), entries.end(),
-        [&sort](const Entry &a, const Entry &b) {
-            if (sort == QLatin1String("nameAsc"))
-                return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-            if (sort == QLatin1String("nameDesc"))
-                return a.name.compare(b.name, Qt::CaseInsensitive) > 0;
-            if (sort == QLatin1String("type")) {
-                const int byType = a.category.compare(b.category, Qt::CaseInsensitive);
-                return byType == 0
-                    ? a.name.compare(b.name, Qt::CaseInsensitive) < 0
-                    : byType < 0;
-            }
+        [](const Entry &a, const Entry &b) {
             return a.recentOrder < b.recentOrder;
         });
 
