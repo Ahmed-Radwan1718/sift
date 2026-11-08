@@ -92,13 +92,11 @@ QLabel *descriptionLabel(const QString &value, QWidget *parent)
 DocumentDashboard::DocumentDashboard(Mode mode,
                                      OpenCallback openFile,
                                      FavoriteCallback setFavorite,
-                                     OpenDialogCallback openDialog,
                                      QWidget *parent)
     : QWidget(parent),
       m_mode(mode),
       m_openFile(std::move(openFile)),
-      m_setFavorite(std::move(setFavorite)),
-      m_openDialog(std::move(openDialog))
+      m_setFavorite(std::move(setFavorite))
 {
     setObjectName(QStringLiteral("libraryPage"));
     setAcceptDrops(false);
@@ -239,25 +237,15 @@ DocumentDashboard::DocumentDashboard(Mode mode,
     emptyTitle->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptyTitle);
 
-    m_emptyMessage = descriptionLabel(QStringLiteral("Open a document to see it here."),
+    m_emptyMessage = descriptionLabel(QStringLiteral("Drag a document here from File Explorer, or press Ctrl+O."),
                                       emptyPage);
     m_emptyMessage->setAlignment(Qt::AlignCenter);
     m_emptyMessage->setWordWrap(true);
     emptyLayout->addWidget(m_emptyMessage);
 
-    auto *emptyOpen = new QPushButton(QStringLiteral("Open files"), emptyPage);
-    emptyOpen->setObjectName(QStringLiteral("subtleButton"));
-    emptyOpen->setCursor(Qt::PointingHandCursor);
-    emptyLayout->addSpacing(5);
-    emptyLayout->addWidget(emptyOpen, 0, Qt::AlignHCenter);
     emptyLayout->addStretch(2);
     m_listStack->addWidget(emptyPage);
     layout->addWidget(m_listStack, 1);
-
-    connect(emptyOpen, &QPushButton::clicked, this, [this]() {
-        if (m_openDialog)
-            m_openDialog();
-    });
 
     connect(m_table, &QTreeWidget::itemActivated, this,
             [this](QTreeWidgetItem *item, int) {
@@ -433,7 +421,7 @@ void DocumentDashboard::refresh()
             "Star a document in Home or Recent to pin it here."));
     } else {
         m_emptyMessage->setText(QStringLiteral(
-            "Open a PDF, Word, Excel, or PowerPoint file to get started."));
+            "Drag a document here from File Explorer, or press Ctrl+O."));
     }
     m_listStack->setCurrentIndex(1);
 }
