@@ -1,0 +1,29 @@
+name: Windows build and PPTX smoke test
+
+on:
+  push:
+    branches: [main, feature/offline-pptx-viewer]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install Qt (build machine only)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          arch: win64_msvc2019_64
+          modules: 'qtpdf'
+          cache: true
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Compile
+        run: cmake --build build --parallel 2
+      - name: Smoke tests
+        run: ctest --test-dir build --output-on-failure

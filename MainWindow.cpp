@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "DocumentDashboard.h"
 #include "PdfViewerPage.h"
+#include "PresentationViewerPage.h"
 #include "Sidebar.h"
 
 #include <QApplication>
@@ -361,8 +362,11 @@ QWidget *MainWindow::createHomePage()
 
 QWidget *MainWindow::createDocumentPage(const QString &filePath)
 {
-    if (QFileInfo(filePath).suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0)
+    const QString extension = QFileInfo(filePath).suffix().toLower();
+    if (extension == QLatin1String("pdf"))
         return new PdfViewerPage(filePath);
+    if (extension == QLatin1String("pptx"))
+        return new PresentationViewerPage(filePath);
 
     auto *page = new QWidget;
     page->setObjectName(QStringLiteral("documentPage"));
@@ -383,13 +387,23 @@ QWidget *MainWindow::createDocumentPage(const QString &filePath)
     layout->addWidget(path);
     layout->addSpacing(18);
 
+    // .ppt uses the legacy binary format, not the Open XML format of .pptx.
+    // Don't imply Sift can render it until a dedicated decoder is integrated.
+    const bool legacyPresentation = extension == QLatin1String("ppt");
     auto *notice = centeredLabel(
-        QStringLiteral("Document preview is coming next"),
+        legacyPresentation
+            ? QStringLiteral("Legacy .ppt format is not supported yet")
+            : QStringLiteral("Document preview is coming next"),
         "dropHeading", page);
     layout->addWidget(notice);
     auto *explanation = centeredLabel(
-        QStringLiteral("Sift has opened a tab for this document, but does not render its contents yet.\n"
-                       "Your original file remains unchanged."),
+        legacyPresentation
+            ? QStringLiteral("Sift can preview .pptx presentations offline, but older .ppt files "
+                             "use a different binary format. To view this presentation in Sift, "
+                             "first save a copy as .pptx using a compatible editor.\n"
+                             "The original file has not been changed.")
+            : QStringLiteral("Sift has opened a tab for this document, but does not render its contents yet.\n"
+                             "Your original file remains unchanged."),
         "subtitle", page);
     layout->addWidget(explanation);
 
