@@ -46,6 +46,60 @@ if(WIN32)
     target_link_libraries(Sift PRIVATE dwmapi)
 endif()
 
+
+# Commercial Aspose.Slides for C++ replaces the lightweight PPTX renderer
+# when an SDK is supplied at build time. Sift itself never downloads a package.
+# Shipping a public build requires reviewing Aspose redistribution/license terms.
+option(SIFT_USE_ASPOSE "Build the offline Aspose.Slides PPT/PPTX rendering engine" OFF)
+set(ASPOSE_SLIDES_ROOT "" CACHE PATH "Directory containing the extracted Aspose.Slides C++ SDK")
+set(ASPOSE_SLIDES_INCLUDE_DIR "" CACHE PATH "Include directory containing DOM/Presentation.h")
+set(ASPOSE_SLIDES_LIBRARY "" CACHE FILEPATH "Full path to Aspose.Slides C++ import/static .lib")
+set(ASPOSE_SLIDES_EXTRA_LIBS "" CACHE STRING "Additional SDK libraries separated by semicolons")
+set(ASPOSE_RUNTIME_DLLS "" CACHE STRING "Required SDK DLL paths separated by semicolons")
+if(SIFT_USE_ASPOSE)
+    if(NOT WIN32)
+        message(FATAL_ERROR "Aspose integration is currently configured for Windows x64 only.")
+    endif()
+    if(NOT ASPOSE_SLIDES_INCLUDE_DIR AND ASPOSE_SLIDES_ROOT)
+        find_path(ASPOSE_SLIDES_INCLUDE_DIR DOM/Presentation.h
+            HINTS
+                "${ASPOSE_SLIDES_ROOT}/include"
+                "${ASPOSE_SLIDES_ROOT}/Include"
+                "${ASPOSE_SLIDES_ROOT}/build/native/include"
+                "${ASPOSE_SLIDES_ROOT}/build/native"
+                "${ASPOSE_SLIDES_ROOT}"
+        )
+    endif()
+    if(NOT ASPOSE_SLIDES_INCLUDE_DIR OR
+       NOT EXISTS "${ASPOSE_SLIDES_INCLUDE_DIR}/DOM/Presentation.h")
+        message(FATAL_ERROR
+            "Aspose C++ headers not found. Set ASPOSE_SLIDES_INCLUDE_DIR to the "
+            "folder containing DOM/Presentation.h. SDK is never fetched by Sift.")
+    endif()
+    if(NOT ASPOSE_SLIDES_LIBRARY OR NOT EXISTS "${ASPOSE_SLIDES_LIBRARY}")
+        message(FATAL_ERROR
+            "Aspose C++ library missing. Set ASPOSE_SLIDES_LIBRARY to its .lib, "
+            "and ASPOSE_SLIDES_EXTRA_LIBS for additional CodePorting dependencies.")
+    endif()
+    target_sources(Sift PRIVATE AsposePresentationDocument.h AsposePresentationDocument.cpp)
+    target_include_directories(Sift PRIVATE "${ASPOSE_SLIDES_INCLUDE_DIR}")
+    target_link_libraries(Sift PRIVATE "${ASPOSE_SLIDES_LIBRARY}" ${ASPOSE_SLIDES_EXTRA_LIBS})
+    target_compile_definitions(Sift PRIVATE SIFT_WITH_ASPOSE=1)
+    foreach(dll IN LISTS ASPOSE_RUNTIME_DLLS)
+        if(NOT EXISTS "${dll}")
+            message(FATAL_ERROR "Aspose runtime DLL not found: ${dll}")
+        endif()
+        add_custom_command(TARGET Sift POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${dll}" "$<TARGET_FILE_DIR:Sift>"
+            VERBATIM
+        )
+    endforeach()
+    message(STATUS "Sift PowerPoint engine: commercial Aspose.Slides for C++")
+else()
+    message(STATUS "Sift PowerPoint engine: legacy lightweight preview")
+endif()
+
 # Developer-only smoke tests; no Python or test runtime is required by Sift users.
 include(CTest)
 if(BUILD_TESTING)
