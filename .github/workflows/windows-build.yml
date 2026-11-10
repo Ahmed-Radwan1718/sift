@@ -42,57 +42,9 @@ jobs:
           arch: win64_msvc2019_64
           modules: 'qtpdf'
           cache: true
-      - name: Download official evaluation SDKs and configure native linkage
+      - name: Build SDK-enabled Sift using its official setup script
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $root = Join-Path $env:RUNNER_TEMP 'aspose-test'
-          New-Item -Path $root -ItemType Directory -Force | Out-Null
-          foreach ($package in @('aspose.slides.cpp', 'codeporting.translator.cs2cpp.framework')) {
-            $url = "https://api.nuget.org/v3-flatcontainer/$package/26.9.0/$package.26.9.0.nupkg"
-            $zip = Join-Path $root "$package.zip"
-            Invoke-WebRequest -Uri $url -OutFile $zip
-            Expand-Archive -Path $zip -DestinationPath (Join-Path $root $package)
-          }
-          $slides = Join-Path $root 'aspose.slides.cpp'
-          $framework = Join-Path $root 'codeporting.translator.cs2cpp.framework'
-          Write-Host 'Framework native package files:'
-          Get-ChildItem $framework -Recurse -File |
-            Where-Object { $_.Name -match 'string\.h$|\.lib$|\.dll$' } |
-            ForEach-Object { $_.FullName.Substring($framework.Length + 1) } |
-            Select-Object -First 50
-
-          $frameworkHeader = Get-ChildItem $framework -Recurse -File -Filter string.h |
-            Where-Object { $_.FullName -match '[\\/]system[\\/]string\.h$' } |
-            Select-Object -First 1
-          if (-not $frameworkHeader) { throw 'CodePorting system/string.h not found' }
-          $frameworkInclude = Split-Path (Split-Path $frameworkHeader.FullName -Parent) -Parent
-
-          $frameworkLibs = @(Get-ChildItem $framework -Recurse -File -Filter '*.lib' |
-            Where-Object { $_.Name -match 'x64\.lib$' } |
-            Select-Object -ExpandProperty FullName)
-          $frameworkDlls = @(Get-ChildItem $framework -Recurse -File -Filter '*.dll' |
-            Where-Object { $_.Name -match 'x64\.dll$' } |
-            Select-Object -ExpandProperty FullName)
-          if ($frameworkLibs.Count -lt 1) { throw 'CodePorting x64 library missing' }
-
-          $include = Join-Path $slides 'build/native/include/aspose.slides.cpp'
-          $lib = Join-Path $slides 'build/native/lib/Aspose.Slides_vc14x64.lib'
-          $dll = Join-Path $slides 'build/native/lib/Aspose.Slides_vc14x64.dll'
-          $allDlls = @($dll) + $frameworkDlls
-          $options = @(
-              '-S', '.', '-B', 'build-aspose', '-G', 'Ninja',
-              '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=ON',
-              '-DSIFT_USE_ASPOSE=ON', "-DASPOSE_SLIDES_INCLUDE_DIR=$include",
-              "-DASPOSE_SLIDES_LIBRARY=$lib",
-              "-DASPOSE_SLIDES_EXTRA_INCLUDE_DIRS=$frameworkInclude",
-              "-DASPOSE_SLIDES_EXTRA_LIBS=$($frameworkLibs -join ';')",
-              "-DASPOSE_RUNTIME_DLLS=$($allDlls -join ';')"
-          )
-          & cmake @options
-          if ($LASTEXITCODE -ne 0) { throw 'Aspose CMake configure failed' }
-      - name: Compile SDK-enabled Sift
-        run: cmake --build build-aspose --parallel 2
+        run: ./scripts/setup-aspose.ps1 -AcceptAsposeLicense -QtPrefix "$env:QT_ROOT_DIR"
       - name: Install CI-only PowerPoint fixture generator
         run: python -m pip install --disable-pip-version-check python-pptx==1.0.2
       - name: Verify PPT and PPTX loading and rendering
