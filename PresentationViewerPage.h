@@ -1,6 +1,12 @@
 #pragma once
 
+#ifdef SIFT_WITH_ASPOSE
+#include "AsposePresentationDocument.h"
+using PresentationDocument = AsposePresentationDocument;
+#else
 #include "PptxDocument.h"
+using PresentationDocument = PptxDocument;
+#endif
 
 #include <QWidget>
 
@@ -33,7 +39,7 @@ private:
     void addNextThumbnail();
     QSize targetSize() const;
 
-    PptxDocument m_document;
+    PresentationDocument m_document;
     QListWidget *m_thumbnails = nullptr;
     QScrollArea *m_scroll = nullptr;
     QLabel *m_slide = nullptr;
