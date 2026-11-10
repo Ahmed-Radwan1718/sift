@@ -3,6 +3,7 @@
 #include <DOM/Presentation.h>
 #include <DOM/ISlide.h>
 #include <DOM/ISlideCollection.h>
+#include <DOM/ISlideSize.h>
 #include <IImage.h>
 #include <ImageFormat.h>
 #include <Util/License.h>
