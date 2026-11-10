@@ -288,6 +288,13 @@ void PresentationViewerPage::updateSlide()
         if (warning.isEmpty())
             warning = QStringLiteral("This slide could not be rendered.");
     }
+#ifndef SIFT_WITH_ASPOSE
+    // A release without the commercial SDK must never imply that its
+    // lightweight PowerPoint preview can faithfully show every slide.
+    if (warning.isEmpty())
+        warning = QStringLiteral(
+            "Basic PowerPoint preview: some text, equations or diagrams may be missing.");
+#endif
     m_warning->setText(warning);
     m_warning->setVisible(!warning.isEmpty());
     m_pageNumber->setText(QString::number(m_current + 1));
