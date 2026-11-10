@@ -62,6 +62,8 @@ if(SIFT_USE_ASPOSE)
         message(FATAL_ERROR "Aspose integration is currently configured for Windows x64 only.")
     endif()
     if(NOT ASPOSE_SLIDES_INCLUDE_DIR AND ASPOSE_SLIDES_ROOT)
+        # An empty cache entry would suppress find_path's lookup.
+        unset(ASPOSE_SLIDES_INCLUDE_DIR CACHE)
         find_path(ASPOSE_SLIDES_INCLUDE_DIR DOM/Presentation.h
             HINTS
                 "${ASPOSE_SLIDES_ROOT}/include"
@@ -79,6 +81,7 @@ if(SIFT_USE_ASPOSE)
             "folder containing DOM/Presentation.h. SDK is never fetched by Sift.")
     endif()
     if(NOT ASPOSE_SLIDES_LIBRARY AND ASPOSE_SLIDES_ROOT)
+        unset(ASPOSE_SLIDES_LIBRARY CACHE)
         find_library(ASPOSE_SLIDES_LIBRARY NAMES
             Aspose.Slides_vc14x64 Aspose.Slides.Cpp Aspose.Slides
             HINTS
