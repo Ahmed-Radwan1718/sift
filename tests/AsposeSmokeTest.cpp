@@ -35,6 +35,15 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "Cannot render PPTX slide: %s\n", qPrintable(warning));
         return 5;
     }
+    // Rendering a slide must actually draw its red rectangle, not merely
+    // return a blank raster (or a watermark without document content).
+    const QColor renderedSwatch = first.pixelColor(200, 250);
+    if (!(renderedSwatch.red() > 155 &&
+          renderedSwatch.red() > renderedSwatch.green() * 1.5 &&
+          renderedSwatch.red() > renderedSwatch.blue() * 1.5)) {
+        std::fprintf(stderr, "Expected red PPTX shape was not rendered.\n");
+        return 12;
+    }
 
     // Exercise the legacy binary .ppt reader using the same source content,
     // converted by the SDK itself. The application never converts on open.
