@@ -54,6 +54,7 @@ option(SIFT_USE_ASPOSE "Build the offline Aspose.Slides PPT/PPTX rendering engin
 set(ASPOSE_SLIDES_ROOT "" CACHE PATH "Directory containing the extracted Aspose.Slides C++ SDK")
 set(ASPOSE_SLIDES_INCLUDE_DIR "" CACHE PATH "Include directory containing DOM/Presentation.h")
 set(ASPOSE_SLIDES_LIBRARY "" CACHE FILEPATH "Full path to Aspose.Slides C++ import/static .lib")
+set(ASPOSE_SLIDES_EXTRA_INCLUDE_DIRS "" CACHE STRING "Additional SDK header directories separated by semicolons")
 set(ASPOSE_SLIDES_EXTRA_LIBS "" CACHE STRING "Additional SDK libraries separated by semicolons")
 set(ASPOSE_RUNTIME_DLLS "" CACHE STRING "Required SDK DLL paths separated by semicolons")
 if(SIFT_USE_ASPOSE)
@@ -65,6 +66,7 @@ if(SIFT_USE_ASPOSE)
             HINTS
                 "${ASPOSE_SLIDES_ROOT}/include"
                 "${ASPOSE_SLIDES_ROOT}/Include"
+                "${ASPOSE_SLIDES_ROOT}/build/native/include/aspose.slides.cpp"
                 "${ASPOSE_SLIDES_ROOT}/build/native/include"
                 "${ASPOSE_SLIDES_ROOT}/build/native"
                 "${ASPOSE_SLIDES_ROOT}"
@@ -76,15 +78,34 @@ if(SIFT_USE_ASPOSE)
             "Aspose C++ headers not found. Set ASPOSE_SLIDES_INCLUDE_DIR to the "
             "folder containing DOM/Presentation.h. SDK is never fetched by Sift.")
     endif()
+    if(NOT ASPOSE_SLIDES_LIBRARY AND ASPOSE_SLIDES_ROOT)
+        find_library(ASPOSE_SLIDES_LIBRARY NAMES
+            Aspose.Slides_vc14x64 Aspose.Slides.Cpp Aspose.Slides
+            HINTS
+                "${ASPOSE_SLIDES_ROOT}/build/native/lib"
+                "${ASPOSE_SLIDES_ROOT}/lib"
+                "${ASPOSE_SLIDES_ROOT}/lib/x64"
+        )
+    endif()
     if(NOT ASPOSE_SLIDES_LIBRARY OR NOT EXISTS "${ASPOSE_SLIDES_LIBRARY}")
         message(FATAL_ERROR
             "Aspose C++ library missing. Set ASPOSE_SLIDES_LIBRARY to its .lib, "
             "and ASPOSE_SLIDES_EXTRA_LIBS for additional CodePorting dependencies.")
     endif()
     target_sources(Sift PRIVATE AsposePresentationDocument.h AsposePresentationDocument.cpp)
-    target_include_directories(Sift PRIVATE "${ASPOSE_SLIDES_INCLUDE_DIR}")
+    target_include_directories(Sift PRIVATE "${ASPOSE_SLIDES_INCLUDE_DIR}"
+        ${ASPOSE_SLIDES_EXTRA_INCLUDE_DIRS})
     target_link_libraries(Sift PRIVATE "${ASPOSE_SLIDES_LIBRARY}" ${ASPOSE_SLIDES_EXTRA_LIBS})
     target_compile_definitions(Sift PRIVATE SIFT_WITH_ASPOSE=1)
+    # The official NuGet native package places the release DLL next to
+    # Aspose.Slides_vc14x64.lib. Runtime DLLs must ship alongside Sift.exe.
+    if(NOT ASPOSE_RUNTIME_DLLS)
+        get_filename_component(_aspose_libdir "${ASPOSE_SLIDES_LIBRARY}" DIRECTORY)
+        set(_aspose_default_dll "${_aspose_libdir}/Aspose.Slides_vc14x64.dll")
+        if(EXISTS "${_aspose_default_dll}")
+            list(APPEND ASPOSE_RUNTIME_DLLS "${_aspose_default_dll}")
+        endif()
+    endif()
     foreach(dll IN LISTS ASPOSE_RUNTIME_DLLS)
         if(NOT EXISTS "${dll}")
             message(FATAL_ERROR "Aspose runtime DLL not found: ${dll}")
