@@ -153,3 +153,27 @@ if(BUILD_TESTING)
         )
     endif()
 endif()
+
+# The SDK-dependent test is enabled only for builds that have linked Aspose.
+# It validates both modern PPTX and legacy binary PPT rendering in evaluation
+# mode, without embedding an SDK binary or license into the repository.
+if(BUILD_TESTING AND SIFT_USE_ASPOSE AND Python3_Interpreter_FOUND)
+    add_executable(AsposeSmokeTest tests/AsposeSmokeTest.cpp AsposePresentationDocument.cpp)
+    target_include_directories(AsposeSmokeTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${ASPOSE_SLIDES_INCLUDE_DIR}"
+        ${ASPOSE_SLIDES_EXTRA_INCLUDE_DIRS})
+    target_link_libraries(AsposeSmokeTest PRIVATE
+        Qt6::Widgets "${ASPOSE_SLIDES_LIBRARY}" ${ASPOSE_SLIDES_EXTRA_LIBS})
+    foreach(dll IN LISTS ASPOSE_RUNTIME_DLLS)
+        add_custom_command(TARGET AsposeSmokeTest POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${dll}" "$<TARGET_FILE_DIR:AsposeSmokeTest>"
+            VERBATIM
+        )
+    endforeach()
+    add_test(NAME AsposePptAndPptx
+        COMMAND AsposeSmokeTest "${CMAKE_CURRENT_BINARY_DIR}/example.pptx")
+    set_tests_properties(AsposePptAndPptx PROPERTIES
+        DEPENDS GenerateExamplePresentation
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
