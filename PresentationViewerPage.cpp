@@ -276,9 +276,25 @@ void PresentationViewerPage::updateSlide()
     QString warning;
     const QImage image = m_document.renderSlide(m_current, size, &warning);
     if (!image.isNull()) {
+        m_slide->setStyleSheet(QString());
         m_slide->setPixmap(QPixmap::fromImage(image));
         m_slide->setFixedSize(image.size());
+    } else {
+        // Never show the previous slide when the current slide failed.
+        m_slide->clear();
+        m_slide->setText(QStringLiteral("Slide preview unavailable"));
+        m_slide->setStyleSheet(QStringLiteral("color: #bdbdbd; background: #292929;"));
+        m_slide->setFixedSize(size);
+        if (warning.isEmpty())
+            warning = QStringLiteral("This slide could not be rendered.");
     }
+#ifndef SIFT_WITH_ASPOSE
+    // A release without the commercial SDK must never imply that its
+    // lightweight PowerPoint preview can faithfully show every slide.
+    if (warning.isEmpty())
+        warning = QStringLiteral(
+            "Basic PowerPoint preview: some text, equations or diagrams may be missing.");
+#endif
     m_warning->setText(warning);
     m_warning->setVisible(!warning.isEmpty());
     m_pageNumber->setText(QString::number(m_current + 1));

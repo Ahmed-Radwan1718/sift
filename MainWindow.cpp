@@ -367,6 +367,10 @@ QWidget *MainWindow::createDocumentPage(const QString &filePath)
         return new PdfViewerPage(filePath);
     if (extension == QLatin1String("pptx"))
         return new PresentationViewerPage(filePath);
+#ifdef SIFT_WITH_ASPOSE
+    if (extension == QLatin1String("ppt"))
+        return new PresentationViewerPage(filePath);
+#endif
 
     auto *page = new QWidget;
     page->setObjectName(QStringLiteral("documentPage"));

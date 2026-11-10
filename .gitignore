@@ -16,3 +16,8 @@ Makefile
 *.o
 *.dll
 *.pdb
+
+# Never commit proprietary Aspose licenses, or unpacked SDK packages.
+Aspose.Slides.lic
+Aspose.Slides.lic.xml
+aspose-sdk/

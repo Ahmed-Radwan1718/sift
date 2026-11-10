@@ -1,5 +1,12 @@
 # PowerPoint support in Sift (preview)
 
+> **Optional high-fidelity backend:** Sift can now be built with the commercial
+> Aspose.Slides for C++ engine for offline `.ppt` and `.pptx` rendering.
+> See [ASPOSE_INTEGRATION.md](ASPOSE_INTEGRATION.md) for build, evaluation
+> watermark, license, and packaging requirements. The feature is enabled
+> only with `SIFT_USE_ASPOSE=ON` and an SDK-linked build. Without it,
+> this document describes the older basic preview engine.
+
 Sift reads modern **.pptx** files locally without Microsoft Office, LibreOffice,
 an online service, or any runtime downloads. The original presentation is never
 edited or copied out to an external application.
