@@ -8,6 +8,7 @@
 #include <ImageFormat.h>
 #include <Util/License.h>
 #include <drawing/size.h>
+#include <drawing/size_f.h>
 #include <system/smart_ptr.h>
 #include <system/string.h>
 
