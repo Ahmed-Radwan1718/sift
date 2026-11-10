@@ -69,7 +69,7 @@ if ($QtPrefix) {
 & cmake @arguments
 if ($LASTEXITCODE -ne 0) { throw "Aspose-enabled CMake configure failed." }
 
-& cmake --build (Join-Path $repository $BuildDirectory) --config Release
+& cmake --build (Join-Path $repository $BuildDirectory) --config Release --parallel 2
 if ($LASTEXITCODE -ne 0) { throw "Aspose-enabled Sift build failed." }
 
 Write-Host "Aspose-enabled Sift built successfully."
