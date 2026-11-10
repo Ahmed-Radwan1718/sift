@@ -27,3 +27,26 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Smoke tests
         run: ctest --test-dir build --output-on-failure
+
+  aspose-sdk-layout:
+    if: github.head_ref == 'feature/aspose-slides-renderer'
+    runs-on: windows-2022
+    steps:
+      - name: Inspect Aspose.Slides.Cpp 26.9.0 NuGet native SDK layout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'aspose-probe'
+          New-Item -Path $root -ItemType Directory -Force | Out-Null
+          $url = 'https://api.nuget.org/v3-flatcontainer/aspose.slides.cpp/26.9.0/aspose.slides.cpp.26.9.0.nupkg'
+          $zip = Join-Path $root 'slides.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $dir = Join-Path $root 'slides'
+          Expand-Archive -Path $zip -DestinationPath $dir
+          Write-Host '=== Candidate includes/libraries/DLLs ==='
+          Get-ChildItem -Path $dir -Recurse -File |
+            Where-Object { $_.Name -match 'Presentation\.h$|Slides.*\.(lib|dll)$|Translator.*\.(lib|dll)$|\.targets$|\.props$|\.nuspec$' } |
+            ForEach-Object { $_.FullName.Substring($dir.Length + 1) } |
+            Select-Object -First 120
+          Write-Host '=== Top level folders ==='
+          Get-ChildItem -Path $dir -Directory | ForEach-Object { $_.Name }
