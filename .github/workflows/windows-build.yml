@@ -50,3 +50,11 @@ jobs:
             Select-Object -First 120
           Write-Host '=== Top level folders ==='
           Get-ChildItem -Path $dir -Directory | ForEach-Object { $_.Name }
+          Write-Host '=== NuGet manifest ==='
+          Get-Content (Join-Path $dir 'Aspose.Slides.Cpp.nuspec') | Select-Object -First 100
+          Write-Host '=== Native targets ==='
+          Get-Content (Join-Path $dir 'build/native/Aspose.Slides.Cpp.targets') | Select-Object -First 130
+          Write-Host '=== Library folder ==='
+          Get-ChildItem (Join-Path $dir 'build/native/lib') -File |
+            Select-Object -First 50 -ExpandProperty Name
+
