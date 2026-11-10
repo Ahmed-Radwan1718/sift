@@ -113,7 +113,7 @@ jobs:
           $allDlls = @($dll) + $frameworkDlls
           $options = @(
               '-S', '.', '-B', 'build-aspose', '-G', 'Ninja',
-              '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF',
+              '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=ON',
               '-DSIFT_USE_ASPOSE=ON', "-DASPOSE_SLIDES_INCLUDE_DIR=$include",
               "-DASPOSE_SLIDES_LIBRARY=$lib",
               "-DASPOSE_SLIDES_EXTRA_INCLUDE_DIRS=$frameworkInclude",
@@ -124,3 +124,5 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Aspose CMake configure failed' }
       - name: Compile SDK-enabled Sift
         run: cmake --build build-aspose --parallel 2
+      - name: Verify PPT and PPTX loading and rendering
+        run: ctest --test-dir build-aspose --output-on-failure
