@@ -171,9 +171,13 @@ if(BUILD_TESTING AND SIFT_USE_ASPOSE AND Python3_Interpreter_FOUND)
             VERBATIM
         )
     endforeach()
+    add_test(NAME GenerateAsposePresentation
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/generate_aspose_sample.py"
+            "${CMAKE_CURRENT_BINARY_DIR}/aspose-example.pptx")
     add_test(NAME AsposePptAndPptx
-        COMMAND AsposeSmokeTest "${CMAKE_CURRENT_BINARY_DIR}/example.pptx")
+        COMMAND AsposeSmokeTest "${CMAKE_CURRENT_BINARY_DIR}/aspose-example.pptx")
     set_tests_properties(AsposePptAndPptx PROPERTIES
-        DEPENDS GenerateExamplePresentation
+        DEPENDS GenerateAsposePresentation
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
